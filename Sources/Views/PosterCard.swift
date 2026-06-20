@@ -14,10 +14,11 @@ struct PosterCard: View {
     private let height: CGFloat = 360
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(spacing: 10) {
             poster
             label
         }
+        .frame(width: width)
     }
 
     private var poster: some View {
@@ -39,14 +40,18 @@ struct PosterCard: View {
         .shadow(color: .black.opacity(0.45), radius: isFocused ? 18 : 8, y: isFocused ? 10 : 4)
     }
 
-    /// Titre toujours visible (discret), qui s'éclaircit quand la carte est
-    /// focalisée. Hauteur fixe pour aligner les rangées.
+    /// Titre toujours visible (discret), **centré** et sur **2 lignes** pour
+    /// que les titres longs restent lisibles. S'éclaircit au focus. Hauteur
+    /// fixe pour aligner les rangées.
     private var label: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(spacing: 4) {
             Text(meta.name ?? "")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(isFocused ? Color.primary : Color.secondary)
-                .lineLimit(1)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: width)
             if let caption {
                 Text(caption)
                     .font(.caption)
@@ -54,7 +59,7 @@ struct PosterCard: View {
                     .lineLimit(1)
             }
         }
-        .frame(width: width, height: 50, alignment: .topLeading)
+        .frame(width: width, height: 70, alignment: .top)
         .animation(.easeOut(duration: 0.15), value: isFocused)
     }
 
