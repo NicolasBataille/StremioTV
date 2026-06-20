@@ -68,7 +68,9 @@ struct MetaDetailView: View {
     private var metaLine: some View {
         HStack(spacing: 24) {
             if let release = detail.releaseInfo { Text(release) }
-            if let rating = detail.imdbRating { Label(rating, systemImage: "star.fill").foregroundStyle(.yellow) }
+            if let rating = detail.imdbRating, !rating.isEmpty {
+                Label(rating, systemImage: "star.fill").foregroundStyle(.yellow)
+            }
             if let genres = detail.genres?.prefix(3).joined(separator: " · ") { Text(genres) }
         }
         .font(.headline)
@@ -116,7 +118,10 @@ struct MetaDetailView: View {
             Label(saved ? "Dans la bibliothèque" : "Ajouter",
                   systemImage: saved ? "checkmark.circle.fill" : "plus.circle")
         }
-        .buttonStyle(.bordered)
+        // .borderedProminent garantit un label contrasté (blanc) ; un gris neutre
+        // le distingue du bouton de lecture principal (accent).
+        .buttonStyle(.borderedProminent)
+        .tint(Color(white: 0.3))
     }
 
     // MARK: - Épisodes
