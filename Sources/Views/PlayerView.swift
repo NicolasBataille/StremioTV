@@ -44,9 +44,9 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     private let onClose: () -> Void
     private let prefs = PlaybackPreferences()
 
-    // Options libVLC d'init : réduit la taille des sous-titres (~70 % du défaut
+    // Options libVLC d'init : réduit la taille des sous-titres (~65 % du défaut
     // VLC qui est trop gros). Les options média `:sub-text-scale` sont ignorées.
-    private let player = VLCMediaPlayer(options: ["--sub-text-scale=70"])
+    private let player = VLCMediaPlayer(options: ["--sub-text-scale=65"])
     private let videoView = UIView()
     private let controls = UIView()
     private let progress = UIProgressView(progressViewStyle: .default)
