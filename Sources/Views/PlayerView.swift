@@ -39,7 +39,9 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     private let onProgress: (UInt64, UInt64) -> Void
     private let onClose: () -> Void
 
-    private let player = VLCMediaPlayer()
+    // Options libVLC d'init : réduit la taille des sous-titres (les options
+    // média `:sub-text-scale` ne sont pas prises en compte ici).
+    private let player = VLCMediaPlayer(options: ["--sub-text-scale=50", "--freetype-rel-fontsize=28"])
     private let videoView = UIView()
     private let controls = UIView()
     private let progress = UIProgressView(progressViewStyle: .default)
@@ -159,7 +161,6 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     private func startPlayback() {
         let media = VLCMedia(url: request.url)
         media.addOption(":network-caching=1500")
-        media.addOption(":sub-text-scale=50") // sous-titres à taille raisonnable (défaut VLC trop gros)
         player.media = media
         // Les sous-titres externes sont ajoutés à la demande depuis le menu
         // (pour conserver leur libellé de langue plutôt qu'un « Track N »).
@@ -216,7 +217,7 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         let audioNames = (player.audioTrackNames as? [String]) ?? []
         let audioIndexes = (player.audioTrackIndexes as? [NSNumber]) ?? []
         trackController.audioOptions = zip(audioNames, audioIndexes).enumerated().map { offset, pair in
-            AudioOption(id: pair.1.int32Value, label: prettyTrack(pair.0, index: offset))
+            AudioOption(id: pair.1.int32Value, label: trackLabel(pair.0, index: offset))
         }
         trackController.currentAudioId = player.currentAudioTrackIndex
 
@@ -224,10 +225,13 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         let subNames = (player.videoSubTitlesNames as? [String]) ?? []
         let subIndexes = (player.videoSubTitlesIndexes as? [NSNumber]) ?? []
         for (offset, pair) in zip(subNames, subIndexes).enumerated() where pair.1.int32Value >= 0 {
+            // Pistes embarquées sans langue connue → regroupées sous « Intégrés »
+            // (au lieu d'une « Piste N » par langue qui pollue la liste).
+            let generic = isGenericName(pair.0)
             subtitles.append(SubtitleOption(
                 id: "emb\(pair.1.int32Value)",
-                language: prettyTrack(pair.0, index: offset),
-                source: "Intégré",
+                language: generic ? "Intégrés" : LanguageNames.display(pair.0),
+                source: generic ? "Piste \(offset + 1)" : "Intégré",
                 kind: .embedded(pair.1.int32Value)
             ))
         }
@@ -261,10 +265,14 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         }
     }
 
-    /// « Track 1 » → « Piste 1 » ; un nom de langue est normalisé (FR).
-    private func prettyTrack(_ name: String, index: Int) -> String {
-        if name.isEmpty || name.lowercased().hasPrefix("track") { return "Piste \(index + 1)" }
-        return LanguageNames.display(name)
+    private func isGenericName(_ name: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty || trimmed.lowercased().hasPrefix("track")
+    }
+
+    /// Libellé d'une piste : la langue si VLC la fournit, sinon « Piste N ».
+    private func trackLabel(_ name: String, index: Int) -> String {
+        isGenericName(name) ? "Piste \(index + 1)" : LanguageNames.display(name)
     }
 
     // MARK: - Overlay
