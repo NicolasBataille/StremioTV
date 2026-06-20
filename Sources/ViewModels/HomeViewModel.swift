@@ -46,19 +46,24 @@ final class HomeViewModel {
             }
         }
 
-        // 3. Charger les sections en parallèle.
-        let loaded: [(Int, CatalogSection?)] = await withTaskGroup(of: (Int, CatalogSection?).self) { group in
+        // 3. Charger les sections en parallèle et les afficher **au fil de l'eau**
+        //    (dans l'ordre), pour que les add-ons rapides s'affichent sans
+        //    attendre les lents.
+        sections = []
+        var byOrder: [Int: CatalogSection] = [:]
+        await withTaskGroup(of: (Int, CatalogSection?).self) { group in
             for job in jobs {
                 group.addTask {
                     (job.order, await self.loadSection(base: job.base, addonName: job.name, catalog: job.catalog))
                 }
             }
-            var result: [(Int, CatalogSection?)] = []
-            for await item in group { result.append(item) }
-            return result
+            for await (order, section) in group {
+                guard let section else { continue }
+                byOrder[order] = section
+                sections = byOrder.keys.sorted().compactMap { byOrder[$0] }
+            }
         }
 
-        sections = loaded.sorted { $0.0 < $1.0 }.compactMap { $0.1 }
         errorMessage = sections.isEmpty ? "Aucun catalogue disponible." : nil
         isLoading = false
     }
