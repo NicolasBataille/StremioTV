@@ -143,17 +143,32 @@ struct MetaDetailView: View {
     }
 
     private func episodeRow(_ video: MetaVideo) -> some View {
-        HStack {
-            Image(systemName: isCurrentEpisode(video) ? "play.circle.fill" : "play.circle")
-                .foregroundStyle(isCurrentEpisode(video) ? Color.brand : .primary)
-            Text(video.displayTitle).lineLimit(1)
+        HStack(spacing: 20) {
+            AsyncImage(url: URL(string: video.thumbnail ?? "")) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.gray.opacity(0.25))
+                    .overlay(Image(systemName: "play.circle").foregroundStyle(.secondary))
+            }
+            .frame(width: 160, height: 90)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(video.displayTitle).font(.headline).lineLimit(1)
+                if let released = video.released?.prefix(10) {
+                    Text(String(released)).font(.caption).foregroundStyle(.secondary)
+                }
+                if let progress = episodeProgress(video) {
+                    ProgressView(value: progress).tint(.brand).frame(width: 260)
+                }
+            }
             Spacer()
-            if let progress = episodeProgress(video) {
-                Text("\(Int(progress * 100)) %").foregroundStyle(Color.brand)
-            } else if let released = video.released?.prefix(10) {
-                Text(String(released)).foregroundStyle(.secondary)
+            if isCurrentEpisode(video) {
+                Image(systemName: "play.circle.fill").font(.title2).foregroundStyle(Color.brand)
             }
         }
+        .padding(.vertical, 6)
     }
 
     private func streamsView(videoId: String, title: String, resumeMs: UInt64) -> some View {
