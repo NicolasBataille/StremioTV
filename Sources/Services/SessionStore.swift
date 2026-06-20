@@ -45,13 +45,16 @@ final class SessionStore {
             return
         }
         status = .working
-        do {
-            let auth = try await api.loginWithToken(key)
-            await finishLogin(auth)
-        } catch {
+        // Valide la session en chargeant la collection d'add-ons (plus fiable
+        // que loginWithToken). authKey invalide → déconnexion.
+        guard let addons = try? await api.addonCollection(authKey: key) else {
             keychain.delete(authAccount)
             status = .loggedOut
+            return
         }
+        repository.setAccountAddons(addons)
+        await library.refresh()
+        status = .loggedIn
     }
 
     func login(email: String, password: String) async {
