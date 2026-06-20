@@ -13,6 +13,7 @@ struct StremioTVApp: App {
                 .environment(session)
                 .environment(session.repository)
                 .environment(session.library)
+                .tint(.brand)
                 .preferredColorScheme(.dark)
         }
     }
