@@ -15,10 +15,12 @@ final class LibraryStore {
 
     // MARK: Vues dérivées
 
-    /// « Continuer à regarder » : en cours, non terminés, plus récent d'abord.
+    /// « Continuer à regarder » : tout item avec une position de reprise
+    /// (`timeOffset > 0`), plus récent d'abord — conforme à Stremio (on n'exclut
+    /// PAS les épisodes marqués « vus », sinon une série en cours disparaît).
     var continueWatching: [LibraryItem] {
         items
-            .filter { $0.isInContinueWatching && !$0.isWatched }
+            .filter(\.isInContinueWatching)
             .sorted { $0.mtimeDate > $1.mtimeDate }
     }
 
