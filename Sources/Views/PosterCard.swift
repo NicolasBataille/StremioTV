@@ -39,15 +39,22 @@ struct PosterCard: View {
         .shadow(color: .black.opacity(0.45), radius: isFocused ? 18 : 8, y: isFocused ? 10 : 4)
     }
 
-    /// Titre + sous-titre, visibles seulement quand la carte est focalisée.
-    /// L'espace reste réservé pour éviter les sauts de mise en page.
+    /// Titre toujours visible (discret), qui s'éclaircit quand la carte est
+    /// focalisée. Hauteur fixe pour aligner les rangées.
     private var label: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(meta.name ?? "").font(.caption.weight(.semibold)).lineLimit(1)
-            Text(caption ?? " ").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(meta.name ?? "")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(isFocused ? Color.primary : Color.secondary)
+                .lineLimit(1)
+            if let caption {
+                Text(caption)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
         }
-        .frame(width: width, height: 44, alignment: .topLeading)
-        .opacity(isFocused ? 1 : 0)
+        .frame(width: width, height: 50, alignment: .topLeading)
         .animation(.easeOut(duration: 0.15), value: isFocused)
     }
 
