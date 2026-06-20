@@ -31,6 +31,13 @@ final class SessionStore {
         status = .loggedOut
     }
 
+    /// Connecte la session à partir d'un authKey déjà obtenu (utilisé pour les
+    /// tests : injecté localement, sans que le mot de passe transite).
+    func bootstrap(authKey: String) async {
+        keychain.set(authKey, for: authAccount)
+        await restore()
+    }
+
     /// Au lancement : tente de restaurer une session via l'authKey du Keychain.
     func restore() async {
         guard let key = keychain.get(authAccount) else {

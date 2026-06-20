@@ -25,8 +25,9 @@ struct RootView: View {
             }
         }
         .task {
-            // Parcours déterministe pour les tests UI : démarrer en mode invité.
-            if Self.testScreen != nil || ProcessInfo.processInfo.arguments.contains("-uitestGuest") {
+            if let key = Self.testAuthKey {
+                await session.bootstrap(authKey: key)
+            } else if Self.testScreen != nil || ProcessInfo.processInfo.arguments.contains("-uitestGuest") {
                 session.continueAsGuest()
             } else {
                 await session.restore()
@@ -39,6 +40,11 @@ struct RootView: View {
         switch screen {
         case "detail":
             MetaDetailView(preview: Self.demoPreview)
+        case "detailSeries":
+            MetaDetailView(preview: MetaPreview(
+                id: "tt0903747", type: "series", name: "Breaking Bad",
+                poster: "https://images.metahub.space/poster/medium/tt0903747/img",
+                posterShape: nil, background: nil, description: nil))
         case "streams":
             StreamsListView(metaId: "tt0111161", type: "movie", videoId: "tt0111161",
                             title: "The Shawshank Redemption", name: "The Shawshank Redemption",
@@ -75,10 +81,19 @@ struct RootView: View {
         return URL(string: args[index + 1])
     }
 
-    /// `-uitestScreen <detail|streams|settings|grid>` : affiche un écran isolé.
+    /// `-uitestScreen <detail|detailSeries|streams|library|settings|grid>`.
     private static var testScreen: String? {
         let args = ProcessInfo.processInfo.arguments
         guard let index = args.firstIndex(of: "-uitestScreen"), index + 1 < args.count else {
+            return nil
+        }
+        return args[index + 1]
+    }
+
+    /// `-uitestAuthKey <key>` : connecte la session avec un authKey fourni.
+    private static var testAuthKey: String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "-uitestAuthKey"), index + 1 < args.count else {
             return nil
         }
         return args[index + 1]
