@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(AddonRepository.self) private var repo
     @Environment(SessionStore.self) private var session
     @State private var newURL = ""
+    @State private var subtitleScale = PlaybackPreferences().subtitleScale
 
     var body: some View {
         NavigationStack {
@@ -13,12 +14,32 @@ struct SettingsView: View {
                 ScreenHeader(title: "Réglages")
                 List {
                     accountSection
+                    playbackSection
                     addonsSection
                     addManualSection
                     tipSection
                 }
             }
         }
+    }
+
+    private var playbackSection: some View {
+        Section("Lecture") {
+            HStack {
+                Label("Taille des sous-titres", systemImage: "captions.bubble")
+                Spacer()
+                Button { adjustSubtitleScale(-5) } label: { Image(systemName: "minus") }
+                    .buttonStyle(.borderedProminent).tint(Color(white: 0.3))
+                Text("\(subtitleScale) %").monospacedDigit().frame(width: 110)
+                Button { adjustSubtitleScale(+5) } label: { Image(systemName: "plus") }
+                    .buttonStyle(.borderedProminent).tint(Color(white: 0.3))
+            }
+        }
+    }
+
+    private func adjustSubtitleScale(_ delta: Int) {
+        subtitleScale = max(20, min(200, subtitleScale + delta))
+        PlaybackPreferences().subtitleScale = subtitleScale
     }
 
     @ViewBuilder private var accountSection: some View {
