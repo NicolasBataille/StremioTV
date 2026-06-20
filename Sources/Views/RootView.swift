@@ -51,6 +51,8 @@ struct RootView: View {
                             poster: nil, resumeOffsetMs: 0)
         case "library":
             LibraryView()
+        case "tracks":
+            TrackSelectionView(controller: Self.mockTracks, onClose: {})
         case "settings":
             SettingsView()
         case "grid":
@@ -97,6 +99,25 @@ struct RootView: View {
             return nil
         }
         return args[index + 1]
+    }
+
+    @MainActor private static var mockTracks: TrackController {
+        let controller = TrackController()
+        controller.audioOptions = [
+            AudioOption(id: 0, label: "Français"),
+            AudioOption(id: 1, label: "English"),
+            AudioOption(id: 2, label: "日本語"),
+        ]
+        controller.currentAudioId = 0
+        controller.subtitleOptions = [
+            SubtitleOption(id: "off", language: "OFF", source: "", kind: .off),
+            SubtitleOption(id: "emb0", language: "English", source: "Intégré", kind: .embedded(0)),
+            SubtitleOption(id: "ext0", language: "Français", source: "OpenSubtitles", kind: .external(URL(string: "https://x/fr1.srt")!)),
+            SubtitleOption(id: "ext1", language: "Français", source: "OpenSubtitles", kind: .external(URL(string: "https://x/fr2.srt")!)),
+            SubtitleOption(id: "ext2", language: "English", source: "OpenSubtitles", kind: .external(URL(string: "https://x/en1.srt")!)),
+        ]
+        controller.currentSubtitleId = "ext0"
+        return controller
     }
 
     private static let demoPreview = MetaPreview(

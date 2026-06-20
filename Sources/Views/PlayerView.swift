@@ -53,6 +53,7 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     private var hasRenderedFirstFrame = false
     private var lastReportedMs: UInt64 = 0
     private var controlsHideWorkItem: DispatchWorkItem?
+    private let trackController = TrackController()
 
     init(request: PlaybackRequest,
          onProgress: @escaping (UInt64, UInt64) -> Void,
@@ -198,56 +199,65 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     // MARK: - Menu pistes (audio / sous-titres)
 
     private func showTrackMenu() {
-        let menu = UIAlertController(title: "Pistes", message: nil, preferredStyle: .actionSheet)
-        menu.addAction(UIAlertAction(title: "Audio (doublage)", style: .default) { _ in self.showAudioMenu() })
-        menu.addAction(UIAlertAction(title: "Sous-titres", style: .default) { _ in self.showSubtitleMenu() })
-        menu.addAction(UIAlertAction(title: "Fermer", style: .cancel))
-        present(menu, animated: true)
+        buildTracks()
+        let panel = TrackSelectionView(controller: trackController) { [weak self] in
+            self?.dismiss(animated: true)
+        }
+        let host = UIHostingController(rootView: panel)
+        host.modalPresentationStyle = .overFullScreen
+        host.view.backgroundColor = .clear
+        present(host, animated: true)
     }
 
-    private func showAudioMenu() {
-        let sheet = UIAlertController(title: "Audio (doublage)", message: nil, preferredStyle: .actionSheet)
-        let names = (player.audioTrackNames as? [String]) ?? []
-        let indexes = (player.audioTrackIndexes as? [NSNumber]) ?? []
-        for (offset, pair) in zip(names, indexes).enumerated() {
-            let (name, index) = pair
-            let check = player.currentAudioTrackIndex == index.int32Value ? " ✓" : ""
-            sheet.addAction(UIAlertAction(title: prettyTrack(name, index: offset) + check, style: .default) { _ in
-                self.player.currentAudioTrackIndex = index.int32Value
-            })
+    /// Construit la liste des pistes (audio + sous-titres intégrés + externes)
+    /// et câble les actions VLC, avant d'ouvrir le panneau.
+    private func buildTracks() {
+        let audioNames = (player.audioTrackNames as? [String]) ?? []
+        let audioIndexes = (player.audioTrackIndexes as? [NSNumber]) ?? []
+        trackController.audioOptions = zip(audioNames, audioIndexes).enumerated().map { offset, pair in
+            AudioOption(id: pair.1.int32Value, label: prettyTrack(pair.0, index: offset))
         }
-        sheet.addAction(UIAlertAction(title: "Fermer", style: .cancel))
-        present(sheet, animated: true)
-    }
+        trackController.currentAudioId = player.currentAudioTrackIndex
 
-    private func showSubtitleMenu() {
-        let sheet = UIAlertController(title: "Sous-titres", message: nil, preferredStyle: .actionSheet)
-        sheet.addAction(UIAlertAction(title: "Désactivés" + (player.currentVideoSubTitleIndex == -1 ? " ✓" : ""),
-                                      style: .default) { _ in self.player.currentVideoSubTitleIndex = -1 })
-
-        // Pistes intégrées au flux.
-        let names = (player.videoSubTitlesNames as? [String]) ?? []
-        let indexes = (player.videoSubTitlesIndexes as? [NSNumber]) ?? []
-        for (offset, pair) in zip(names, indexes).enumerated() where pair.1.int32Value >= 0 {
-            let (name, index) = pair
-            let check = player.currentVideoSubTitleIndex == index.int32Value ? " ✓" : ""
-            sheet.addAction(UIAlertAction(title: "Intégré · \(prettyTrack(name, index: offset))" + check, style: .default) { _ in
-                self.player.currentVideoSubTitleIndex = index.int32Value
-            })
+        var subtitles: [SubtitleOption] = [SubtitleOption(id: "off", language: "OFF", source: "", kind: .off)]
+        let subNames = (player.videoSubTitlesNames as? [String]) ?? []
+        let subIndexes = (player.videoSubTitlesIndexes as? [NSNumber]) ?? []
+        for (offset, pair) in zip(subNames, subIndexes).enumerated() where pair.1.int32Value >= 0 {
+            subtitles.append(SubtitleOption(
+                id: "emb\(pair.1.int32Value)",
+                language: prettyTrack(pair.0, index: offset),
+                source: "Intégré",
+                kind: .embedded(pair.1.int32Value)
+            ))
         }
-
-        // Sous-titres externes (add-ons OpenSubtitles), un par langue.
-        var seenLanguages = Set<String>()
-        for subtitle in request.subtitles {
-            let language = subtitle.displayLanguage
-            guard seenLanguages.insert(language).inserted, let url = URL(string: subtitle.url) else { continue }
-            sheet.addAction(UIAlertAction(title: "\(language) (en ligne)", style: .default) { _ in
-                self.player.addPlaybackSlave(url, type: .subtitle, enforce: true)
-            })
+        for (index, subtitle) in request.subtitles.enumerated() {
+            guard let url = URL(string: subtitle.url) else { continue }
+            subtitles.append(SubtitleOption(
+                id: "ext\(index)",
+                language: subtitle.displayLanguage,
+                source: "OpenSubtitles",
+                kind: .external(url)
+            ))
         }
+        trackController.subtitleOptions = subtitles
+        trackController.currentSubtitleId = player.currentVideoSubTitleIndex == -1
+            ? "off" : "emb\(player.currentVideoSubTitleIndex)"
+        trackController.subtitleDelayMs = Int(player.currentVideoSubTitleDelay / 1000)
 
-        sheet.addAction(UIAlertAction(title: "Fermer", style: .cancel))
-        present(sheet, animated: true)
+        trackController.selectAudio = { [weak self] index in
+            self?.player.currentAudioTrackIndex = index
+        }
+        trackController.selectSubtitle = { [weak self] option in
+            guard let self else { return }
+            switch option.kind {
+            case .off: self.player.currentVideoSubTitleIndex = -1
+            case .embedded(let index): self.player.currentVideoSubTitleIndex = index
+            case .external(let url): self.player.addPlaybackSlave(url, type: .subtitle, enforce: true)
+            }
+        }
+        trackController.setDelay = { [weak self] milliseconds in
+            self?.player.currentVideoSubTitleDelay = milliseconds * 1000
+        }
     }
 
     /// « Track 1 » → « Piste 1 » ; un nom de langue est normalisé (FR).
