@@ -8,6 +8,7 @@ struct MetaDetailView: View {
     @Environment(AddonRepository.self) private var repo
     @Environment(LibraryStore.self) private var library
     @State private var model = DetailViewModel()
+    @State private var selectedSeason: Int?
 
     private var type: String { preview.type ?? "movie" }
     private var detail: MetaDetail { model.meta ?? MetaDetail(from: preview) }
@@ -130,9 +131,10 @@ struct MetaDetailView: View {
         if model.isLoadingMeta {
             ProgressView()
         } else if let videos = detail.videos, !videos.isEmpty {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 Text("Épisodes").font(.title2.bold())
-                ForEach(videos) { video in
+                if seasons.count > 1 { seasonPicker }
+                ForEach(displayedEpisodes) { video in
                     NavigationLink {
                         streamsView(videoId: video.id, title: video.displayTitle,
                                     resumeMs: episodeResumeMs(video))
@@ -145,6 +147,46 @@ struct MetaDetailView: View {
         } else {
             Text("Aucun épisode listé.").foregroundStyle(.secondary)
         }
+    }
+
+    private var seasonPicker: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 16) {
+                ForEach(seasons, id: \.self) { season in
+                    Button {
+                        selectedSeason = season
+                    } label: {
+                        Text("Saison \(season)")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(season == effectiveSeason ? .brand : Color(white: 0.25))
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    /// Saisons disponibles (>0), triées.
+    private var seasons: [Int] {
+        let values = Set((detail.videos ?? []).compactMap(\.season).filter { $0 > 0 })
+        return values.sorted()
+    }
+
+    /// Saison affichée : choix utilisateur, sinon celle de l'épisode en cours,
+    /// sinon la première.
+    private var effectiveSeason: Int {
+        if let selectedSeason { return selectedSeason }
+        if let videoId = savedItem?.state.videoId,
+           let current = detail.videos?.first(where: { $0.id == videoId }),
+           let season = current.season, season > 0 {
+            return season
+        }
+        return seasons.first ?? 1
+    }
+
+    private var displayedEpisodes: [MetaVideo] {
+        guard !seasons.isEmpty else { return detail.videos ?? [] }
+        return (detail.videos ?? []).filter { $0.season == effectiveSeason }
     }
 
     private func episodeRow(_ video: MetaVideo) -> some View {
