@@ -134,6 +134,7 @@ struct MetaDetailView: View {
                     } label: {
                         episodeRow(video)
                     }
+                    .buttonStyle(.card)
                 }
             }
         } else {
