@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Bannière « héros » en tête d'accueil : grand backdrop de l'item vedette,
-/// titre, métadonnées, synopsis court et bouton « Voir ».
+/// titre et métadonnées. La bannière entière est focusable (style carte) et
+/// ouvre la fiche détaillée.
 struct HeroBanner: View {
     let preview: MetaPreview
     let bases: [String]
@@ -11,33 +12,18 @@ struct HeroBanner: View {
     private var backdrop: String? { detail?.background ?? preview.background ?? preview.poster }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        NavigationLink {
+            MetaDetailView(preview: preview)
+        } label: {
             BackdropImage(urlString: backdrop)
-            BackdropScrim()
-            VStack(alignment: .leading, spacing: 12) {
-                Text(detail?.name ?? preview.name ?? "")
-                    .font(.system(size: 56, weight: .bold))
-                    .lineLimit(1)
-                metaLine
-                if let description = detail?.description, !description.isEmpty {
-                    Text(description)
-                        .font(.title3)
-                        .foregroundStyle(.white.opacity(0.85))
-                        .lineLimit(2)
-                        .frame(maxWidth: 1000, alignment: .leading)
-                }
-                NavigationLink {
-                    MetaDetailView(preview: preview)
-                } label: {
-                    Label("Voir", systemImage: "play.fill").font(.title3)
-                }
-                .buttonStyle(.borderedProminent)
-                .padding(.top, 4)
-            }
-            .padding(60)
+                .frame(maxWidth: .infinity)
+                .frame(height: 460)
+                .clipped()
+                .overlay { BackdropScrim() }
+                .overlay(alignment: .bottomLeading) { caption.padding(60) }
+                .clipShape(RoundedRectangle(cornerRadius: 16))
         }
-        .frame(height: 520)
-        .clipped()
+        .buttonStyle(.card)
         .task {
             detail = try? await AddonClient().meta(
                 base: bases.first ?? "", type: preview.type ?? "movie", id: preview.id
@@ -45,17 +31,27 @@ struct HeroBanner: View {
         }
     }
 
+    private var caption: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(detail?.name ?? preview.name ?? "")
+                .font(.system(size: 56, weight: .bold))
+                .lineLimit(1)
+            metaLine
+        }
+    }
+
     @ViewBuilder private var metaLine: some View {
         HStack(spacing: 18) {
             if let year = detail?.releaseInfo { Text(year) }
-            if let rating = detail?.imdbRating {
+            if let rating = detail?.imdbRating, !rating.isEmpty {
                 Label(rating, systemImage: "star.fill").foregroundStyle(.yellow)
             }
             if let genres = detail?.genres?.prefix(2).joined(separator: " · ") {
                 Text(genres)
             }
+            Label("Voir", systemImage: "play.fill").foregroundStyle(.white)
         }
         .font(.headline)
-        .foregroundStyle(.white.opacity(0.8))
+        .foregroundStyle(.white.opacity(0.85))
     }
 }
