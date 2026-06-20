@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Fiche détaillée d'un film/série : synopsis, bibliothèque, reprise de lecture
-/// et accès aux sources (directement pour un film, par épisode pour une série).
+/// Fiche détaillée d'un film/série : backdrop cinématographique, poster, infos,
+/// bibliothèque, reprise de lecture et accès aux sources (par épisode en série).
 struct MetaDetailView: View {
     let preview: MetaPreview
 
@@ -17,54 +17,90 @@ struct MetaDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 36) {
-                Text(displayName).font(.largeTitle.bold())
-                metaLine
-                if let description = detail.description, !description.isEmpty {
-                    Text(description)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: 1100, alignment: .leading)
-                }
-                sources
+            VStack(alignment: .leading, spacing: 44) {
+                heroHeader
+                if type == "series" { episodeList }
             }
             .padding(60)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(background)
+        .background {
+            ZStack {
+                BackdropImage(urlString: detail.background ?? posterURL)
+                BackdropScrim()
+            }
+            .ignoresSafeArea()
+        }
         .task { await model.loadMeta(preview: preview, bases: repo.addons.map(\.base)) }
+    }
+
+    // MARK: - En-tête (poster + infos)
+
+    private var heroHeader: some View {
+        HStack(alignment: .top, spacing: 44) {
+            posterThumbnail
+            VStack(alignment: .leading, spacing: 20) {
+                Text(displayName).font(.system(size: 56, weight: .bold))
+                metaLine
+                if let description = detail.description, !description.isEmpty {
+                    Text(description)
+                        .font(.title3)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(maxWidth: 1000, alignment: .leading)
+                }
+                actionButtons
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var posterThumbnail: some View {
+        AsyncImage(url: URL(string: posterURL ?? "")) { image in
+            image.resizable().aspectRatio(contentMode: .fill)
+        } placeholder: {
+            RoundedRectangle(cornerRadius: 14).fill(.gray.opacity(0.25))
+        }
+        .frame(width: 260, height: 390)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(radius: 20)
     }
 
     private var metaLine: some View {
         HStack(spacing: 24) {
             if let release = detail.releaseInfo { Text(release) }
-            if let rating = detail.imdbRating { Label(rating, systemImage: "star.fill") }
-            if let genres = detail.genres?.prefix(3).joined(separator: ", ") { Text(genres) }
+            if let rating = detail.imdbRating { Label(rating, systemImage: "star.fill").foregroundStyle(.yellow) }
+            if let genres = detail.genres?.prefix(3).joined(separator: " · ") { Text(genres) }
         }
         .font(.headline)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.white.opacity(0.75))
     }
 
-    // MARK: - Sources
+    // MARK: - Actions
 
-    @ViewBuilder private var sources: some View {
-        if type == "series" {
-            VStack(alignment: .leading, spacing: 24) {
-                libraryButton
-                episodeList
-            }
-        } else {
-            HStack(spacing: 24) {
+    @ViewBuilder private var actionButtons: some View {
+        HStack(spacing: 24) {
+            if type == "series" {
+                if let resume = seriesResumeTarget {
+                    NavigationLink {
+                        streamsView(videoId: resume.id, title: resume.displayTitle,
+                                    resumeMs: savedItem?.state.timeOffset ?? 0)
+                    } label: {
+                        Label("Reprendre \(resume.displayTitle)", systemImage: "play.fill").font(.title3)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            } else {
                 NavigationLink {
                     streamsView(videoId: preview.id, title: displayName, resumeMs: movieResumeMs)
                 } label: {
                     Label(movieResumeMs > 0 ? "Reprendre" : "Voir les sources",
-                          systemImage: "play.rectangle.fill").font(.title3)
+                          systemImage: "play.fill").font(.title3)
                 }
                 .buttonStyle(.borderedProminent)
-                libraryButton
             }
+            libraryButton
         }
+        .padding(.top, 8)
     }
 
     private var libraryButton: some View {
@@ -77,11 +113,13 @@ struct MetaDetailView: View {
                 )
             }
         } label: {
-            Label(saved ? "Dans la bibliothèque" : "Ajouter à la bibliothèque",
+            Label(saved ? "Dans la bibliothèque" : "Ajouter",
                   systemImage: saved ? "checkmark.circle.fill" : "plus.circle")
         }
         .buttonStyle(.bordered)
     }
+
+    // MARK: - Épisodes
 
     @ViewBuilder private var episodeList: some View {
         if model.isLoadingMeta {
@@ -106,10 +144,11 @@ struct MetaDetailView: View {
     private func episodeRow(_ video: MetaVideo) -> some View {
         HStack {
             Image(systemName: isCurrentEpisode(video) ? "play.circle.fill" : "play.circle")
+                .foregroundStyle(isCurrentEpisode(video) ? Color.brand : .primary)
             Text(video.displayTitle).lineLimit(1)
             Spacer()
             if let progress = episodeProgress(video) {
-                Text("\(Int(progress * 100)) %").foregroundStyle(.tint)
+                Text("\(Int(progress * 100)) %").foregroundStyle(Color.brand)
             } else if let released = video.released?.prefix(10) {
                 Text(String(released)).foregroundStyle(.secondary)
             }
@@ -130,6 +169,12 @@ struct MetaDetailView: View {
         return state.timeOffset
     }
 
+    private var seriesResumeTarget: MetaVideo? {
+        guard type == "series", let videoId = savedItem?.state.videoId,
+              (savedItem?.state.timeOffset ?? 0) > 0 else { return nil }
+        return detail.videos?.first { $0.id == videoId }
+    }
+
     private func isCurrentEpisode(_ video: MetaVideo) -> Bool {
         savedItem?.state.videoId == video.id && (savedItem?.state.timeOffset ?? 0) > 0
     }
@@ -141,20 +186,5 @@ struct MetaDetailView: View {
     private func episodeProgress(_ video: MetaVideo) -> Double? {
         guard isCurrentEpisode(video), let state = savedItem?.state, state.duration > 0 else { return nil }
         return min(1, Double(state.timeOffset) / Double(state.duration))
-    }
-
-    @ViewBuilder private var background: some View {
-        if let background = detail.background, let url = URL(string: background) {
-            AsyncImage(url: url) { image in
-                image.resizable().aspectRatio(contentMode: .fill)
-            } placeholder: {
-                Color.black
-            }
-            .ignoresSafeArea()
-            .overlay(Color.black.opacity(0.65))
-            .blur(radius: 6)
-        } else {
-            Color.black.ignoresSafeArea()
-        }
     }
 }

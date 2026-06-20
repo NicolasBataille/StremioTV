@@ -10,12 +10,15 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 50) {
+                    if let featured = model.sections.first?.metas.first {
+                        HeroBanner(preview: featured, bases: repo.addons.map(\.base))
+                    }
                     if !library.continueWatching.isEmpty {
                         ContinueWatchingRow(items: library.continueWatching)
                     }
                     content
                 }
-                .padding(.vertical, 40)
+                .padding(.bottom, 40)
             }
             .task(id: repo.addons.map(\.id)) {
                 await model.load(addons: repo.addons)
