@@ -1,0 +1,17 @@
+# Xcode / build
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Projet généré par XcodeGen (recréé via `xcodegen generate`)
+StremioTV.xcodeproj/
+
+# Binaire VLC (~560 Mo, récupéré via scripts/fetch_vlckit.sh)
+Vendor/
+
+# macOS
+.DS_Store
+
+# Outils locaux
+.osgrep/

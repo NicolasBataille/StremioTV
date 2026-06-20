@@ -1,0 +1,74 @@
+name: StremioTV
+options:
+  bundleIdPrefix: com.stremio.tv
+  createIntermediateGroups: true
+  deploymentTarget:
+    tvOS: "17.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "3"
+targets:
+  StremioTV:
+    type: application
+    platform: tvOS
+    deploymentTarget: "17.0"
+    sources:
+      - Sources
+    dependencies:
+      - framework: Vendor/TVVLCKit.xcframework
+        embed: true
+        codeSign: true
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: StremioTV
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stremio.tv.client
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_BITCODE: NO
+  StremioTVTests:
+    type: bundle.unit-test
+    platform: tvOS
+    deploymentTarget: "17.0"
+    sources:
+      - Tests
+    dependencies:
+      - target: StremioTV
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stremio.tv.client.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/StremioTV.app/StremioTV"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+  StremioTVUITests:
+    type: bundle.ui-testing
+    platform: tvOS
+    deploymentTarget: "17.0"
+    sources:
+      - UITests
+    dependencies:
+      - target: StremioTV
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stremio.tv.client.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: StremioTV
+schemes:
+  StremioTV:
+    build:
+      targets:
+        StremioTV: all
+        StremioTVTests: [test]
+        StremioTVUITests: [test]
+    test:
+      targets:
+        - StremioTVTests
+        - StremioTVUITests
+      gatherCoverageData: true
