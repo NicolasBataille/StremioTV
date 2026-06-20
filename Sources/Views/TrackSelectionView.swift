@@ -34,24 +34,54 @@ struct TrackSelectionView: View {
 
     private var subtitleColumns: some View {
         HStack(alignment: .top, spacing: 48) {
+            // Clic sur une langue = applique directement le meilleur sous-titre
+            // (embarqué prioritaire). La colonne Variante ne sert qu'à affiner.
             column("Langue") {
                 ForEach(controller.subtitleLanguages, id: \.self) { language in
-                    row(title: language, selected: language == selectedLanguage) {
+                    row(title: language, selected: language == currentLanguage) {
                         selectedLanguage = language
+                        applyBestVariant(for: language)
                     }
                 }
             }
+            .focusSection()
+
             column("Variante") {
-                ForEach(controller.variants(for: selectedLanguage)) { option in
-                    row(title: option.source.isEmpty ? option.language : option.source,
-                        subtitle: option.source.isEmpty ? nil : option.language,
-                        selected: option.id == controller.currentSubtitleId) {
-                        controller.currentSubtitleId = option.id
-                        controller.selectSubtitle(option)
+                let variants = controller.variants(for: selectedLanguage)
+                if variants.count > 1 {
+                    ForEach(Array(variants.enumerated()), id: \.element.id) { index, option in
+                        row(title: variantTitle(option, index: index),
+                            selected: option.id == controller.currentSubtitleId) {
+                            controller.currentSubtitleId = option.id
+                            controller.selectSubtitle(option)
+                        }
                     }
+                } else {
+                    Text("—").foregroundStyle(.secondary).padding(.vertical, 10)
                 }
             }
+            .focusSection()
+
             column("Réglages") { delayControl }
+                .focusSection()
+        }
+    }
+
+    private var currentLanguage: String {
+        controller.subtitleOptions.first { $0.id == controller.currentSubtitleId }?.language ?? "OFF"
+    }
+
+    private func applyBestVariant(for language: String) {
+        guard let best = controller.variants(for: language).first else { return }
+        controller.currentSubtitleId = best.id
+        controller.selectSubtitle(best)
+    }
+
+    private func variantTitle(_ option: SubtitleOption, index: Int) -> String {
+        switch option.kind {
+        case .off: return "OFF"
+        case .embedded: return option.source.isEmpty ? "Intégré" : option.source
+        case .external: return "\(option.source) \(index + 1)"
         }
     }
 

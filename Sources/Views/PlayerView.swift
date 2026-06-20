@@ -159,6 +159,7 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     private func startPlayback() {
         let media = VLCMedia(url: request.url)
         media.addOption(":network-caching=1500")
+        media.addOption(":sub-text-scale=50") // sous-titres à taille raisonnable (défaut VLC trop gros)
         player.media = media
         // Les sous-titres externes sont ajoutés à la demande depuis le menu
         // (pour conserver leur libellé de langue plutôt qu'un « Track N »).
