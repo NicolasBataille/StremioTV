@@ -9,26 +9,28 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                if session.status != .loggedIn {
-                    notLoggedIn
-                } else if library.library.isEmpty {
-                    emptyState
-                } else {
-                    LazyVGrid(columns: columns, spacing: 40) {
-                        ForEach(library.library) { item in
-                            NavigationLink {
-                                MetaDetailView(preview: item.asPreview())
-                            } label: {
-                                PosterCard(meta: item.asPreview(), progress: item.progress)
+            VStack(alignment: .leading, spacing: 0) {
+                ScreenHeader(title: "Bibliothèque")
+                ScrollView {
+                    if session.status != .loggedIn {
+                        notLoggedIn
+                    } else if library.library.isEmpty {
+                        emptyState
+                    } else {
+                        LazyVGrid(columns: columns, spacing: 40) {
+                            ForEach(library.library) { item in
+                                NavigationLink {
+                                    MetaDetailView(preview: item.asPreview())
+                                } label: {
+                                    PosterCard(meta: item.asPreview(), progress: item.progress)
+                                }
+                                .buttonStyle(.card)
                             }
-                            .buttonStyle(.card)
                         }
+                        .padding(60)
                     }
-                    .padding(60)
                 }
             }
-            .navigationTitle("Bibliothèque")
         }
     }
 

@@ -17,23 +17,25 @@ struct StreamsListView: View {
     @State private var playback: PlaybackRequest?
 
     var body: some View {
-        List {
-            if model.isLoadingStreams {
-                HStack { ProgressView(); Text("Recherche de flux…") }
-            }
-            if let note = model.note {
-                Text(note).font(.callout).foregroundStyle(.secondary)
-            }
-            if !model.subtitles.isEmpty {
-                Label("\(model.subtitles.count) sous-titres disponibles",
-                      systemImage: "captions.bubble")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            ForEach(model.streams) { stream in
-                streamRow(stream)
+        VStack(alignment: .leading, spacing: 0) {
+            ScreenHeader(title: title)
+            List {
+                if model.isLoadingStreams {
+                    HStack { ProgressView(); Text("Recherche de flux…") }
+                }
+                if let note = model.note {
+                    Text(note).font(.callout).foregroundStyle(.secondary)
+                }
+                if !model.subtitles.isEmpty {
+                    Label("\(model.subtitles.count) sous-titres disponibles",
+                          systemImage: "captions.bubble")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                ForEach(model.streams) { stream in
+                    streamRow(stream)
+                }
             }
         }
-        .navigationTitle(title)
         .task {
             let bases = repo.addons.map(\.base)
             await model.loadStreams(type: type, id: videoId, bases: bases)

@@ -19,6 +19,6 @@ struct SubtitleItem: Codable, Sendable, Identifiable {
 
     var id: String { subtitleId ?? url }
 
-    /// Libellé lisible pour le menu (langue, à défaut l'identifiant).
-    var displayLanguage: String { lang.isEmpty ? id : lang }
+    /// Libellé lisible pour le menu (nom de langue normalisé).
+    var displayLanguage: String { lang.isEmpty ? "Sous-titre" : LanguageNames.display(lang) }
 }

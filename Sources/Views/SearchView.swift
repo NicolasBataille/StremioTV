@@ -10,32 +10,34 @@ struct SearchView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 40) {
-                    ForEach(model.results) { meta in
-                        NavigationLink {
-                            MetaDetailView(preview: meta)
-                        } label: {
-                            PosterCard(meta: meta)
+            VStack(alignment: .leading, spacing: 0) {
+                ScreenHeader(title: "Recherche")
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 40) {
+                        ForEach(model.results) { meta in
+                            NavigationLink {
+                                MetaDetailView(preview: meta)
+                            } label: {
+                                PosterCard(meta: meta)
+                            }
+                            .buttonStyle(.card)
                         }
-                        .buttonStyle(.card)
+                    }
+                    .padding(60)
+
+                    if model.isSearching {
+                        ProgressView().padding(40)
+                    } else if !model.lastQuery.isEmpty && model.results.isEmpty {
+                        Text("Aucun résultat pour « \(model.lastQuery) »")
+                            .foregroundStyle(.secondary)
+                            .padding(40)
                     }
                 }
-                .padding(60)
-
-                if model.isSearching {
-                    ProgressView().padding(40)
-                } else if !model.lastQuery.isEmpty && model.results.isEmpty {
-                    Text("Aucun résultat pour « \(model.lastQuery) »")
-                        .foregroundStyle(.secondary)
-                        .padding(40)
+                .searchable(text: $query, prompt: "Rechercher un film, une série…")
+                .onChange(of: query) { _, newValue in
+                    Task { await model.search(query: newValue, addons: repo.addons) }
                 }
             }
-            .searchable(text: $query, prompt: "Rechercher un film, une série…")
-            .onChange(of: query) { _, newValue in
-                Task { await model.search(query: newValue, addons: repo.addons) }
-            }
-            .navigationTitle("Recherche")
         }
     }
 }

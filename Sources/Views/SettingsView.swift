@@ -9,13 +9,15 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                accountSection
-                addonsSection
-                addManualSection
-                tipSection
+            VStack(alignment: .leading, spacing: 0) {
+                ScreenHeader(title: "Réglages")
+                List {
+                    accountSection
+                    addonsSection
+                    addManualSection
+                    tipSection
+                }
             }
-            .navigationTitle("Réglages")
         }
     }
 
