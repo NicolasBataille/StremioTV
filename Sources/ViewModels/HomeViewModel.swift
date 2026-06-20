@@ -3,10 +3,12 @@ import Observation
 
 /// Charge, pour chaque add-on, son manifest puis la 1re page de ses catalogues,
 /// et expose des sections prêtes à afficher (rangées) sur l'accueil.
+/// Le chargement est parallélisé (manifests puis catalogues) pour rester rapide
+/// même avec de nombreux add-ons.
 @Observable
 @MainActor
 final class HomeViewModel {
-    struct CatalogSection: Identifiable {
+    struct CatalogSection: Identifiable, Sendable {
         let id: String
         let title: String
         let base: String
@@ -24,23 +26,40 @@ final class HomeViewModel {
     func load(addons: [InstalledAddon]) async {
         isLoading = true
         errorMessage = nil
-        var collected: [CatalogSection] = []
-        var firstError: String?
 
-        for addon in addons {
-            guard let manifest = await resolveManifest(addon) else {
-                firstError = firstError ?? "Manifest indisponible (\(addon.name))"
-                continue
+        // 1. Résoudre les manifests en parallèle (ordre conservé).
+        let manifests: [Manifest?] = await withTaskGroup(of: (Int, Manifest?).self) { group in
+            for (index, addon) in addons.enumerated() {
+                group.addTask { (index, await self.resolveManifest(addon)) }
             }
+            var result = [Manifest?](repeating: nil, count: addons.count)
+            for await (index, manifest) in group { result[index] = manifest }
+            return result
+        }
+
+        // 2. Construire la liste ordonnée des catalogues à charger.
+        var jobs: [(order: Int, base: String, name: String, catalog: CatalogDescriptor)] = []
+        for (index, addon) in addons.enumerated() {
+            guard let manifest = manifests[index] else { continue }
             for catalog in manifest.catalogs ?? [] where !catalog.isSearchOnly {
-                if let section = await loadSection(base: addon.base, addonName: manifest.name, catalog: catalog) {
-                    collected.append(section)
-                }
+                jobs.append((jobs.count, addon.base, manifest.name, catalog))
             }
         }
 
-        sections = collected
-        errorMessage = collected.isEmpty ? firstError : nil
+        // 3. Charger les sections en parallèle.
+        let loaded: [(Int, CatalogSection?)] = await withTaskGroup(of: (Int, CatalogSection?).self) { group in
+            for job in jobs {
+                group.addTask {
+                    (job.order, await self.loadSection(base: job.base, addonName: job.name, catalog: job.catalog))
+                }
+            }
+            var result: [(Int, CatalogSection?)] = []
+            for await item in group { result.append(item) }
+            return result
+        }
+
+        sections = loaded.sorted { $0.0 < $1.0 }.compactMap { $0.1 }
+        errorMessage = sections.isEmpty ? "Aucun catalogue disponible." : nil
         isLoading = false
     }
 
@@ -64,7 +83,7 @@ final class HomeViewModel {
                 metas: metas
             )
         } catch {
-            return nil // un catalogue en échec ne casse pas l'accueil
+            return nil
         }
     }
 }
