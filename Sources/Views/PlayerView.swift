@@ -50,6 +50,7 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     private let spinner = UIActivityIndicatorView(style: .large)
 
     private var didResume = false
+    private var hasRenderedFirstFrame = false
     private var lastReportedMs: UInt64 = 0
     private var controlsHideWorkItem: DispatchWorkItem?
 
@@ -158,14 +159,8 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         let media = VLCMedia(url: request.url)
         media.addOption(":network-caching=1500")
         player.media = media
-
-        // Sous-titres externes (add-ons OpenSubtitles).
-        for subtitle in request.subtitles {
-            if let url = URL(string: subtitle.url) {
-                player.addPlaybackSlave(url, type: .subtitle, enforce: false)
-            }
-        }
-
+        // Les sous-titres externes sont ajoutés à la demande depuis le menu
+        // (pour conserver leur libellé de langue plutôt qu'un « Track N »).
         player.play()
         showControls(autoHide: true)
     }
@@ -214,9 +209,10 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         let sheet = UIAlertController(title: "Audio (doublage)", message: nil, preferredStyle: .actionSheet)
         let names = (player.audioTrackNames as? [String]) ?? []
         let indexes = (player.audioTrackIndexes as? [NSNumber]) ?? []
-        for (name, index) in zip(names, indexes) {
+        for (offset, pair) in zip(names, indexes).enumerated() {
+            let (name, index) = pair
             let check = player.currentAudioTrackIndex == index.int32Value ? " ✓" : ""
-            sheet.addAction(UIAlertAction(title: name + check, style: .default) { _ in
+            sheet.addAction(UIAlertAction(title: prettyTrack(name, index: offset) + check, style: .default) { _ in
                 self.player.currentAudioTrackIndex = index.int32Value
             })
         }
@@ -226,18 +222,38 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
 
     private func showSubtitleMenu() {
         let sheet = UIAlertController(title: "Sous-titres", message: nil, preferredStyle: .actionSheet)
-        sheet.addAction(UIAlertAction(title: "Aucun" + (player.currentVideoSubTitleIndex == -1 ? " ✓" : ""),
+        sheet.addAction(UIAlertAction(title: "Désactivés" + (player.currentVideoSubTitleIndex == -1 ? " ✓" : ""),
                                       style: .default) { _ in self.player.currentVideoSubTitleIndex = -1 })
+
+        // Pistes intégrées au flux.
         let names = (player.videoSubTitlesNames as? [String]) ?? []
         let indexes = (player.videoSubTitlesIndexes as? [NSNumber]) ?? []
-        for (name, index) in zip(names, indexes) {
+        for (offset, pair) in zip(names, indexes).enumerated() where pair.1.int32Value >= 0 {
+            let (name, index) = pair
             let check = player.currentVideoSubTitleIndex == index.int32Value ? " ✓" : ""
-            sheet.addAction(UIAlertAction(title: name + check, style: .default) { _ in
+            sheet.addAction(UIAlertAction(title: "Intégré · \(prettyTrack(name, index: offset))" + check, style: .default) { _ in
                 self.player.currentVideoSubTitleIndex = index.int32Value
             })
         }
+
+        // Sous-titres externes (add-ons OpenSubtitles), un par langue.
+        var seenLanguages = Set<String>()
+        for subtitle in request.subtitles {
+            let language = subtitle.displayLanguage
+            guard seenLanguages.insert(language).inserted, let url = URL(string: subtitle.url) else { continue }
+            sheet.addAction(UIAlertAction(title: "\(language) (en ligne)", style: .default) { _ in
+                self.player.addPlaybackSlave(url, type: .subtitle, enforce: true)
+            })
+        }
+
         sheet.addAction(UIAlertAction(title: "Fermer", style: .cancel))
         present(sheet, animated: true)
+    }
+
+    /// « Track 1 » → « Piste 1 » ; un nom de langue est normalisé (FR).
+    private func prettyTrack(_ name: String, index: Int) -> String {
+        if name.isEmpty || name.lowercased().hasPrefix("track") { return "Piste \(index + 1)" }
+        return LanguageNames.display(name)
     }
 
     // MARK: - Overlay
@@ -270,9 +286,10 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     func mediaPlayerStateChanged(_ aNotification: Notification) {
         switch player.state {
         case .buffering, .opening:
-            spinner.startAnimating()
+            // Spinner uniquement avant la 1re image (pas de re-buffering visible
+            // par-dessus une lecture déjà lancée).
+            if !hasRenderedFirstFrame { spinner.startAnimating() }
         case .playing:
-            spinner.stopAnimating()
             if !didResume, request.resumeOffsetMs > 0 {
                 didResume = true
                 player.time = VLCTime(int: Int32(min(request.resumeOffsetMs, UInt64(Int32.max))))
@@ -282,11 +299,17 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         case .ended, .stopped:
             spinner.stopAnimating(); reportProgress()
         default:
-            spinner.stopAnimating()
+            break
         }
     }
 
     func mediaPlayerTimeChanged(_ aNotification: Notification) {
+        // Dès que le temps avance, l'image est rendue : on masque le spinner
+        // définitivement.
+        if currentMs > 0, !hasRenderedFirstFrame {
+            hasRenderedFirstFrame = true
+            spinner.stopAnimating()
+        }
         progress.setProgress(player.position, animated: false)
         currentTimeLabel.text = format(ms: currentMs)
         if durationMs > 0 { durationLabel.text = format(ms: durationMs) }
