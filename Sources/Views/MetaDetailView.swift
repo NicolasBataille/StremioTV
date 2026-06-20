@@ -156,7 +156,7 @@ struct MetaDetailView: View {
                     Button {
                         selectedSeason = season
                     } label: {
-                        Text("Saison \(season)")
+                        Text(season == 0 ? "Spéciaux" : "Saison \(season)")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(season == effectiveSeason ? .brand : Color(white: 0.25))
@@ -166,22 +166,21 @@ struct MetaDetailView: View {
         }
     }
 
-    /// Saisons disponibles (>0), triées.
+    /// Saisons disponibles, triées (saison 0 = « Spéciaux » incluse).
     private var seasons: [Int] {
-        let values = Set((detail.videos ?? []).compactMap(\.season).filter { $0 > 0 })
-        return values.sorted()
+        Set((detail.videos ?? []).compactMap(\.season)).sorted()
     }
 
-    /// Saison affichée : choix utilisateur, sinon celle de l'épisode en cours,
-    /// sinon la première.
+    /// Saison affichée : choix utilisateur, sinon celle de l'épisode en cours
+    /// (y compris les spéciaux), sinon la 1re saison « normale » (≥ 1).
     private var effectiveSeason: Int {
         if let selectedSeason { return selectedSeason }
         if let videoId = savedItem?.state.videoId,
            let current = detail.videos?.first(where: { $0.id == videoId }),
-           let season = current.season, season > 0 {
+           let season = current.season {
             return season
         }
-        return seasons.first ?? 1
+        return seasons.first(where: { $0 > 0 }) ?? seasons.first ?? 1
     }
 
     private var displayedEpisodes: [MetaVideo] {

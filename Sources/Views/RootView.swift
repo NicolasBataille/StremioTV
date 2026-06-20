@@ -42,8 +42,8 @@ struct RootView: View {
             MetaDetailView(preview: Self.demoPreview)
         case "detailSeries":
             MetaDetailView(preview: MetaPreview(
-                id: "tt0903747", type: "series", name: "Breaking Bad",
-                poster: "https://images.metahub.space/poster/medium/tt0903747/img",
+                id: "tt14452776", type: "series", name: "The Bear",
+                poster: "https://images.metahub.space/poster/medium/tt14452776/img",
                 posterShape: nil, background: nil, description: nil))
         case "streams":
             StreamsListView(metaId: "tt0111161", type: "movie", videoId: "tt0111161",
