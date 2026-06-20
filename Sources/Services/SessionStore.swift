@@ -48,7 +48,8 @@ final class SessionStore {
         // Valide la session en chargeant la collection d'add-ons (plus fiable
         // que loginWithToken). authKey invalide → déconnexion.
         guard let addons = try? await api.addonCollection(authKey: key) else {
-            keychain.delete(authAccount)
+            // On NE supprime PAS la clé : un souci réseau/décodage transitoire
+            // ne doit pas effacer la session (on réessaiera au prochain lancement).
             status = .loggedOut
             return
         }
