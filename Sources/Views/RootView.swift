@@ -27,7 +27,7 @@ struct RootView: View {
         .task {
             if let key = Self.testAuthKey {
                 await session.bootstrap(authKey: key)
-            } else if Self.testScreen != nil || ProcessInfo.processInfo.arguments.contains("-uitestGuest") {
+            } else if ProcessInfo.processInfo.arguments.contains("-uitestGuest") {
                 session.continueAsGuest()
             } else {
                 await session.restore()
