@@ -41,6 +41,7 @@ struct PosterCard: View {
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(alignment: .bottom) { progressBar }
+        .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
     }
 
     @ViewBuilder private var progressBar: some View {

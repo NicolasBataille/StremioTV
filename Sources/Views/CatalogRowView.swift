@@ -18,7 +18,10 @@ struct CatalogRowView: View {
                         catalogId: section.catalogId
                     )
                 } label: {
-                    Text("Tout voir")
+                    HStack(spacing: 6) {
+                        Text("Tout voir")
+                        Image(systemName: "chevron.right").font(.caption)
+                    }
                 }
                 .buttonStyle(.plain)
                 .font(.callout)
