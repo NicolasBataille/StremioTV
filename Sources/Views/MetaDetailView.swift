@@ -220,7 +220,8 @@ struct MetaDetailView: View {
     private func streamsView(videoId: String, title: String, resumeMs: UInt64) -> some View {
         StreamsListView(
             metaId: preview.id, type: type, videoId: videoId, title: title,
-            name: displayName, poster: posterURL, resumeOffsetMs: resumeMs
+            name: displayName, poster: posterURL, resumeOffsetMs: resumeMs,
+            episodeIds: detail.videos?.map(\.id) ?? []
         )
     }
 

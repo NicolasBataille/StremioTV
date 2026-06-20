@@ -10,6 +10,7 @@ struct StreamsListView: View {
     let name: String
     let poster: String?
     let resumeOffsetMs: UInt64
+    var episodeIds: [String] = []
 
     @Environment(AddonRepository.self) private var repo
     @Environment(LibraryStore.self) private var library
@@ -44,11 +45,14 @@ struct StreamsListView: View {
         .fullScreenCover(item: $playback) { request in
             PlayerView(
                 request: request,
-                onProgress: { offset, duration in
+                resolveNext: { currentVideoId in
+                    await resolveNextEpisode(after: currentVideoId, episodeIds: request.episodeIds, providerBase: request.providerBase)
+                },
+                onProgress: { playedVideoId, offset, duration in
                     Task {
                         await library.recordProgress(
                             metaId: metaId, type: type, name: name, poster: poster,
-                            videoId: videoId, timeOffsetMs: offset, durationMs: duration
+                            videoId: playedVideoId, timeOffsetMs: offset, durationMs: duration
                         )
                     }
                 },
@@ -58,12 +62,41 @@ struct StreamsListView: View {
         }
     }
 
+    /// Résout l'épisode suivant en réutilisant **le même provider** (repli sur
+    /// tous les add-ons sinon), avec ses sous-titres.
+    private func resolveNextEpisode(after currentVideoId: String, episodeIds: [String], providerBase: String?) async -> PlaybackRequest? {
+        guard let index = episodeIds.firstIndex(of: currentVideoId), index + 1 < episodeIds.count else { return nil }
+        let nextId = episodeIds[index + 1]
+        let client = AddonClient()
+
+        var streams: [StreamItem] = []
+        if let base = providerBase, let found = try? await client.streams(base: base, type: type, id: nextId) {
+            streams = found.map { var s = $0; s.sourceBase = base; return s }
+        }
+        if !streams.contains(where: { $0.isDirectlyPlayable }) {
+            for base in repo.addons.map(\.base) {
+                if let found = try? await client.streams(base: base, type: type, id: nextId) {
+                    streams += found.map { var s = $0; s.sourceBase = base; return s }
+                }
+            }
+        }
+        guard let chosen = streams.first(where: { $0.isDirectlyPlayable }), let url = chosen.playableURL else { return nil }
+
+        await model.loadSubtitles(type: type, id: nextId, addons: repo.addons)
+        return PlaybackRequest(
+            url: url, metaId: metaId, type: type, name: name, poster: poster,
+            videoId: nextId, resumeOffsetMs: 0, subtitles: model.subtitles,
+            episodeIds: episodeIds, providerBase: chosen.sourceBase
+        )
+    }
+
     private func streamRow(_ stream: StreamItem) -> some View {
         Button {
             if let url = stream.playableURL {
                 playback = PlaybackRequest(
                     url: url, metaId: metaId, type: type, name: name, poster: poster,
-                    videoId: videoId, resumeOffsetMs: resumeOffsetMs, subtitles: model.subtitles
+                    videoId: videoId, resumeOffsetMs: resumeOffsetMs, subtitles: model.subtitles,
+                    episodeIds: episodeIds, providerBase: stream.sourceBase
                 )
             }
         } label: {

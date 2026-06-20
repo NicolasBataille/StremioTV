@@ -12,4 +12,6 @@ struct PlaybackRequest: Identifiable {
     let videoId: String         // épisode courant (= metaId pour un film)
     let resumeOffsetMs: UInt64   // position de reprise
     let subtitles: [SubtitleItem]
+    var episodeIds: [String] = []       // ordre des épisodes (pour « suivant »)
+    var providerBase: String? = nil     // add-on ayant fourni le flux (réutilisé)
 }

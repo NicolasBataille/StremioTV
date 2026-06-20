@@ -36,7 +36,11 @@ final class DetailViewModel {
         var collected: [StreamItem] = []
         for base in bases {
             if let found = try? await client.streams(base: base, type: type, id: id) {
-                collected += found
+                collected += found.map { stream in
+                    var tagged = stream
+                    tagged.sourceBase = base
+                    return tagged
+                }
             }
         }
         streams = collected

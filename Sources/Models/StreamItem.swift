@@ -19,6 +19,9 @@ struct StreamItem: Codable, Sendable, Identifiable {
     let description: String?
     let behaviorHints: StreamBehaviorHints?
 
+    /// Add-on (base) qui a fourni ce flux — rempli après récupération, non décodé.
+    var sourceBase: String?
+
     var id: String {
         [url, infoHash, ytId, name, title].compactMap { $0 }.joined(separator: "·")
     }

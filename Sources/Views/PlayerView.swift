@@ -6,13 +6,16 @@ import TVVLCKit
 /// (embarqués + externes OpenSubtitles), et remontée de progression.
 struct PlayerView: UIViewControllerRepresentable {
     let request: PlaybackRequest
-    var onProgress: (_ timeOffsetMs: UInt64, _ durationMs: UInt64) -> Void = { _, _ in }
+    var resolveNext: (_ currentVideoId: String) async -> PlaybackRequest? = { _ in nil }
+    var onProgress: (_ videoId: String, _ timeOffsetMs: UInt64, _ durationMs: UInt64) -> Void = { _, _, _ in }
     var onClose: () -> Void = {}
 
     init(request: PlaybackRequest,
-         onProgress: @escaping (UInt64, UInt64) -> Void = { _, _ in },
+         resolveNext: @escaping (String) async -> PlaybackRequest? = { _ in nil },
+         onProgress: @escaping (String, UInt64, UInt64) -> Void = { _, _, _ in },
          onClose: @escaping () -> Void = {}) {
         self.request = request
+        self.resolveNext = resolveNext
         self.onProgress = onProgress
         self.onClose = onClose
     }
@@ -28,16 +31,18 @@ struct PlayerView: UIViewControllerRepresentable {
     }
 
     func makeUIViewController(context: Context) -> VLCPlayerViewController {
-        VLCPlayerViewController(request: request, onProgress: onProgress, onClose: onClose)
+        VLCPlayerViewController(request: request, resolveNext: resolveNext, onProgress: onProgress, onClose: onClose)
     }
 
     func updateUIViewController(_ controller: VLCPlayerViewController, context: Context) {}
 }
 
 final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
-    private let request: PlaybackRequest
-    private let onProgress: (UInt64, UInt64) -> Void
+    private var currentRequest: PlaybackRequest
+    private let resolveNext: (String) async -> PlaybackRequest?
+    private let onProgress: (String, UInt64, UInt64) -> Void
     private let onClose: () -> Void
+    private let prefs = PlaybackPreferences()
 
     // Options libVLC d'init : réduit la taille des sous-titres (~70 % du défaut
     // VLC qui est trop gros). Les options média `:sub-text-scale` sont ignorées.
@@ -53,14 +58,17 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
 
     private var didResume = false
     private var hasRenderedFirstFrame = false
+    private var didApplyPrefs = false
     private var lastReportedMs: UInt64 = 0
     private var controlsHideWorkItem: DispatchWorkItem?
     private let trackController = TrackController()
 
     init(request: PlaybackRequest,
-         onProgress: @escaping (UInt64, UInt64) -> Void,
+         resolveNext: @escaping (String) async -> PlaybackRequest?,
+         onProgress: @escaping (String, UInt64, UInt64) -> Void,
          onClose: @escaping () -> Void) {
-        self.request = request
+        self.currentRequest = request
+        self.resolveNext = resolveNext
         self.onProgress = onProgress
         self.onClose = onClose
         super.init(nibName: nil, bundle: nil)
@@ -112,12 +120,14 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.textColor = .white
         titleLabel.font = .preferredFont(forTextStyle: .headline)
-        titleLabel.text = request.name
+        titleLabel.text = currentRequest.name
 
         hintLabel.translatesAutoresizingMaskIntoConstraints = false
         hintLabel.textColor = UIColor.white.withAlphaComponent(0.7)
         hintLabel.font = .preferredFont(forTextStyle: .caption1)
-        hintLabel.text = "▲ pistes audio / sous-titres   ◀▶ ±15 s   Menu : quitter"
+        hintLabel.text = currentRequest.episodeIds.count > 1
+            ? "▲ pistes   ◀▶ ±15 s   ▼ épisode suivant   Menu : quitter"
+            : "▲ pistes audio / sous-titres   ◀▶ ±15 s   Menu : quitter"
 
         progress.translatesAutoresizingMaskIntoConstraints = false
         progress.progressTintColor = .white
@@ -159,13 +169,35 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     }
 
     private func startPlayback() {
+        loadAndPlay(currentRequest)
+    }
+
+    /// Charge et lit une requête (épisode courant ou suivant), en réinitialisant
+    /// l'état de reprise et l'application des préférences.
+    private func loadAndPlay(_ request: PlaybackRequest) {
+        currentRequest = request
+        didResume = false
+        hasRenderedFirstFrame = false
+        didApplyPrefs = false
+        lastReportedMs = 0
+        titleLabel.text = request.name
         let media = VLCMedia(url: request.url)
         media.addOption(":network-caching=1500")
         player.media = media
-        // Les sous-titres externes sont ajoutés à la demande depuis le menu
-        // (pour conserver leur libellé de langue plutôt qu'un « Track N »).
         player.play()
+        spinner.startAnimating()
         showControls(autoHide: true)
+    }
+
+    /// Passe à l'épisode suivant en réutilisant le même provider.
+    private func goNext() {
+        reportProgress()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if let next = await self.resolveNext(self.currentRequest.videoId) {
+                self.loadAndPlay(next)
+            }
+        }
     }
 
     // MARK: - Télécommande
@@ -182,6 +214,8 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
                 player.jumpForward(15); showControls(autoHide: true)
             case .upArrow:
                 showTrackMenu()
+            case .downArrow:
+                goNext()
             case .menu:
                 reportProgress()
                 player.stop()
@@ -214,14 +248,7 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     /// Construit la liste des pistes (audio + sous-titres intégrés + externes)
     /// et câble les actions VLC, avant d'ouvrir le panneau.
     private func buildTracks() {
-        // Vraie langue de chaque piste (id → langue) via les métadonnées du média.
-        var trackLanguage: [Int32: String] = [:]
-        for info in (player.media?.tracksInformation as? [[String: Any]]) ?? [] {
-            guard let id = (info[VLCMediaTracksInformationId] as? NSNumber)?.int32Value,
-                  let lang = info[VLCMediaTracksInformationLanguage] as? String,
-                  !lang.isEmpty else { continue }
-            trackLanguage[id] = lang
-        }
+        let trackLanguage = trackLanguages()
 
         let audioNames = (player.audioTrackNames as? [String]) ?? []
         let audioIndexes = (player.audioTrackIndexes as? [NSNumber]) ?? []
@@ -246,7 +273,7 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
                 kind: .embedded(id)
             ))
         }
-        for (index, subtitle) in request.subtitles.enumerated() {
+        for (index, subtitle) in currentRequest.subtitles.enumerated() {
             guard let url = URL(string: subtitle.url) else { continue }
             subtitles.append(SubtitleOption(
                 id: "ext\(index)",
@@ -261,7 +288,10 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         trackController.subtitleDelayMs = Int(player.currentVideoSubTitleDelay / 1000)
 
         trackController.selectAudio = { [weak self] index in
-            self?.player.currentAudioTrackIndex = index
+            guard let self else { return }
+            self.player.currentAudioTrackIndex = index
+            // Mémorise la langue choisie (persistée entre épisodes/sessions).
+            self.prefs.audioLanguage = self.trackController.audioOptions.first { $0.id == index }?.label
         }
         trackController.selectSubtitle = { [weak self] option in
             guard let self else { return }
@@ -270,9 +300,46 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
             case .embedded(let index): self.player.currentVideoSubTitleIndex = index
             case .external(let url): self.player.addPlaybackSlave(url, type: .subtitle, enforce: true)
             }
+            self.prefs.subtitleLanguage = option.language   // "OFF" pour l'option désactivée
         }
         trackController.setDelay = { [weak self] milliseconds in
             self?.player.currentVideoSubTitleDelay = milliseconds * 1000
+        }
+    }
+
+    /// Langue réelle de chaque piste (id → langue) via les métadonnées du média.
+    private func trackLanguages() -> [Int32: String] {
+        var map: [Int32: String] = [:]
+        for info in (player.media?.tracksInformation as? [[String: Any]]) ?? [] {
+            guard let id = (info[VLCMediaTracksInformationId] as? NSNumber)?.int32Value,
+                  let lang = info[VLCMediaTracksInformationLanguage] as? String,
+                  !lang.isEmpty else { continue }
+            map[id] = lang
+        }
+        return map
+    }
+
+    /// Réapplique la langue audio / sous-titres préférée (persistée) sur la piste
+    /// correspondante, une fois la lecture démarrée.
+    private func applyPreferredTracks() {
+        let langs = trackLanguages()
+        if let preferred = prefs.audioLanguage {
+            let indexes = (player.audioTrackIndexes as? [NSNumber]) ?? []
+            if let match = indexes.first(where: { langs[$0.int32Value].map(LanguageNames.display) == preferred }) {
+                player.currentAudioTrackIndex = match.int32Value
+            }
+        }
+        guard let preferred = prefs.subtitleLanguage else { return }
+        if preferred == "OFF" {
+            player.currentVideoSubTitleIndex = -1
+            return
+        }
+        let indexes = (player.videoSubTitlesIndexes as? [NSNumber]) ?? []
+        if let match = indexes.first(where: { $0.int32Value >= 0 && langs[$0.int32Value].map(LanguageNames.display) == preferred }) {
+            player.currentVideoSubTitleIndex = match.int32Value
+        } else if let external = currentRequest.subtitles.first(where: { $0.displayLanguage == preferred }),
+                  let url = URL(string: external.url) {
+            player.addPlaybackSlave(url, type: .subtitle, enforce: true)
         }
     }
 
@@ -308,7 +375,7 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         let time = currentMs
         guard time > 0 else { return }
         lastReportedMs = time
-        onProgress(time, durationMs)
+        onProgress(currentRequest.videoId, time, durationMs)
     }
 
     // MARK: - VLCMediaPlayerDelegate
@@ -320,13 +387,19 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
             // par-dessus une lecture déjà lancée).
             if !hasRenderedFirstFrame { spinner.startAnimating() }
         case .playing:
-            if !didResume, request.resumeOffsetMs > 0 {
+            if !didResume, currentRequest.resumeOffsetMs > 0 {
                 didResume = true
-                player.time = VLCTime(int: Int32(min(request.resumeOffsetMs, UInt64(Int32.max))))
+                player.time = VLCTime(int: Int32(min(currentRequest.resumeOffsetMs, UInt64(Int32.max))))
+            }
+            if !didApplyPrefs {
+                didApplyPrefs = true
+                applyPreferredTracks()
             }
         case .error:
             spinner.stopAnimating(); showError()
-        case .ended, .stopped:
+        case .ended:
+            spinner.stopAnimating(); reportProgress(); goNext() // enchaîne l'épisode suivant
+        case .stopped:
             spinner.stopAnimating(); reportProgress()
         default:
             break
