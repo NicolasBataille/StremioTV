@@ -45,6 +45,10 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        # Lumières Hue : accès au réseau local (pont Hue) + découverte Bonjour.
+        NSLocalNetworkUsageDescription: "StremioTV pilote tes lumières Philips Hue pendant la lecture."
+        NSBonjourServices:
+          - _hue._tcp
     settings:
       base:
         PRODUCT_NAME: StremioTV

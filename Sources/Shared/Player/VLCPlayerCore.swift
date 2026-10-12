@@ -44,6 +44,8 @@ class VLCPlayerCoreController: UIViewController, VLCMediaPlayerDelegate {
     private(set) var hasRenderedFirstFrame = false
     private var didApplyPrefs = false
     private var lastReportedMs: UInt64 = 0
+    /// Lumières Hue (Ambilight) de la lecture en cours ; nil si désactivées ou non configurées.
+    private var ambilight: AmbilightSession?
 
     init(request: PlaybackRequest,
          resolveNext: @escaping (String) async -> PlaybackRequest?,
@@ -71,6 +73,7 @@ class VLCPlayerCoreController: UIViewController, VLCMediaPlayerDelegate {
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         reportProgress()
+        stopAmbilight()
         player.stop()
     }
 
@@ -118,6 +121,7 @@ class VLCPlayerCoreController: UIViewController, VLCMediaPlayerDelegate {
 
     /// Charge et lit une requête (épisode courant ou suivant).
     func loadAndPlay(_ request: PlaybackRequest) {
+        stopAmbilight()
         currentRequest = request
         didResume = false
         hasRenderedFirstFrame = false
@@ -175,6 +179,7 @@ class VLCPlayerCoreController: UIViewController, VLCMediaPlayerDelegate {
 
     func closePlayer() {
         reportProgress()
+        stopAmbilight()
         player.stop()
         onClose()
     }
@@ -320,14 +325,19 @@ class VLCPlayerCoreController: UIViewController, VLCMediaPlayerDelegate {
                 didApplyPrefs = true
                 applyPreferredTracks()
             }
+            ambilight?.resume()
             onPlaybackStateChanged(isPlaying: true)
         case .paused:
+            ambilight?.pause()
             onPlaybackStateChanged(isPlaying: false)
         case .error:
+            stopAmbilight()
             spinner.stopAnimating(); showError()
         case .ended:
+            stopAmbilight()
             spinner.stopAnimating(); reportProgress(); goNext()
         case .stopped:
+            stopAmbilight()
             spinner.stopAnimating(); reportProgress()
         default:
             break
@@ -339,11 +349,22 @@ class VLCPlayerCoreController: UIViewController, VLCMediaPlayerDelegate {
             hasRenderedFirstFrame = true
             spinner.stopAnimating()
             onRenderedFirstFrame()
+            // Lumières Hue : démarrées à la 1re image rendue (pas de capture du spinner).
+            if ambilight == nil {
+                ambilight = HueSyncService.shared.makeSession(videoView: videoView, player: player)
+                ambilight?.start()
+            }
         }
         onTimeUpdate(currentMs: currentMs, durationMs: durationMs, position: player.position)
         if currentMs > lastReportedMs + 20_000 {
             reportProgress()
         }
+    }
+
+    /// Arrête les lumières Hue de la lecture (libère la zone). Sans effet sur la vidéo.
+    private func stopAmbilight() {
+        ambilight?.stop()
+        ambilight = nil
     }
 
     /// Alerte d'échec de lecture (surchargée au besoin). Ferme le lecteur sur OK.

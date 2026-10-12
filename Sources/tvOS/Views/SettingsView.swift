@@ -1,10 +1,11 @@
 import SwiftUI
 
 /// Réglages : compte Stremio (connexion/déconnexion, rafraîchissement),
-/// liste des add-ons (compte + manuels) et ajout manuel.
+/// lecture, lumières Hue, liste des add-ons (compte + manuels) et ajout manuel.
 struct SettingsView: View {
     @Environment(AddonRepository.self) private var repo
     @Environment(SessionStore.self) private var session
+    @Environment(HueSyncService.self) private var hue
     @State private var newURL = ""
     @State private var subtitleScale = PlaybackPreferences().subtitleScale
 
@@ -15,6 +16,7 @@ struct SettingsView: View {
                 List {
                     accountSection
                     playbackSection
+                    hueSection
                     addonsSection
                     addManualSection
                     tipSection
@@ -33,6 +35,26 @@ struct SettingsView: View {
                 Text("\(subtitleScale) %").monospacedDigit().frame(width: 110)
                 Button { adjustSubtitleScale(+5) } label: { Image(systemName: "plus") }
                     .buttonStyle(.borderedProminent).tint(Color(white: 0.3))
+            }
+        }
+    }
+
+    private var hueSection: some View {
+        Section("Lumières Hue") {
+            NavigationLink {
+                HueSettingsView()
+            } label: {
+                HStack {
+                    Label("Lumières Hue (Ambilight)", systemImage: "lightbulb.led.wide")
+                    Spacer()
+                    Text(hue.status.settingsBadge(isEnabled: hue.isPlaybackSyncEnabled,
+                                                   hasSelectedArea: hue.hasSelectedArea))
+                        .font(.caption2)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(hue.status.settingsBadgeColor(isEnabled: hue.isPlaybackSyncEnabled,
+                                                                  hasSelectedArea: hue.hasSelectedArea).opacity(0.3), in: Capsule())
+                }
             }
         }
     }

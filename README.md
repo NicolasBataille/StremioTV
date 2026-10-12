@@ -28,6 +28,7 @@ Le code métier (modèles, services, view-models, cœur de lecture VLC) est
 - **Fiches** films & séries (synopsis, note IMDb, liste d'épisodes).
 - **Lecture universelle (VLCKit)** : HLS, MP4, **MKV**, AVI… tout ce que RealDebrid renvoie (avec contrôles télécommande : play/pause, saut ±15 s, progression).
 - **Réglages** : compte (connexion/déconnexion, rafraîchir), add-ons (compte + manuels), ajout manuel.
+- **Lumières Hue (Ambilight)** : les lampes d'une zone de divertissement Philips Hue suivent les couleurs de l'image pendant la lecture (voir plus bas).
 - **Mode invité** (Cinemeta) sans compte.
 - **App Icon / Top Shelf** (brand assets tvOS).
 
@@ -109,6 +110,61 @@ Les flux **torrent purs** (`infoHash` sans `url`) ne sont pas lisibles directeme
 l'app les affiche mais les marque non lisibles (il faudrait le streaming-server
 `Stremio/stremio-service` sur le réseau). Avec RealDebrid, ce cas ne se présente pas.
 
+## Lumières Hue (Ambilight)
+
+Pendant la lecture d'une vidéo dans StremioTV (Apple TV, iPhone, iPad), les
+lampes de la **zone de divertissement** Hue choisie prennent la couleur des bords
+de l'image, en direct, via l'**API Hue Entertainment** (flux HueStream v2 chiffré
+en DTLS sur le réseau local, ~50 mises à jour/s). Aucun boîtier HDMI ni cloud :
+l'app parle directement au pont.
+
+**Prérequis**
+
+- Un **pont Hue carré** (Bridge v2) sur le même réseau que l'appareil.
+- Une **zone de divertissement** créée une fois dans l'app Hue
+  (*Réglages › Zones de divertissement*), lampes placées autour de la TV ;
+  idéalement de type « TV ». Max. 20 canaux (un ruban gradient en compte plusieurs).
+
+**Appairage** (*Réglages › Lumières Hue*)
+
+1. **Rechercher le pont** (Bonjour + `discovery.meethue.com`), ou saisir son
+   **adresse IP** (visible dans l'app Hue : *Réglages › Mes ponts Hue*).
+2. **Associer**, puis appuyer sur le **gros bouton rond du pont** dans les 30 s.
+   Les identifiants (clé d'application + clé DTLS) sont gardés dans le **Keychain** ;
+   le certificat du pont est épinglé au premier contact.
+3. Choisir la **zone** (la première zone « TV » est présélectionnée), puis
+   **Tester les lumières** (rouge, vert, bleu, blanc sur chaque lampe).
+
+Sur iPhone/iPad, iOS demande l'autorisation d'accès au **réseau local** au premier
+usage : il faut l'accepter (sinon *Réglages iOS › StremioTV › Réseau local*).
+
+**Réglages** : activation pendant la lecture, luminosité (10–100 %), saturation
+(100–160 %), réactivité (douce / équilibrée / rapide), **retard des lumières**
+(0–600 ms, pour se caler sur une TV ou une barre de son qui retarde l'image) et
+méthode de capture.
+
+**Limites**
+
+- Uniquement pendant la **lecture dans StremioTV**, app **au premier plan**
+  (pas Netflix ni les autres apps : pour celles-ci, utilise l'app officielle
+  Hue Sync de ta TV ou un Sync Box). La zone est libérée à l'arrêt de la
+  vidéo et quand l'app passe en arrière-plan (en pause, les lampes gardent
+  la dernière couleur).
+- Méthode de capture **« Automatique »** : essaie la **capture de la vue** vidéo,
+  puis bascule sur les **snapshots VLC** (moins fluides, ~4 img/s) si la première ne
+  renvoie que du noir ; la méthode qui marche est mémorisée.
+- Bandes noires (letterbox / pillarbox) ignorées, sous-titres exclus des lampes du bas.
+
+**Dépannage**
+
+- *« La zone est déjà utilisée par une autre app »* : une seule app peut diffuser
+  sur une zone à la fois. Arrête **Hue Sync** (app de la TV, PC/Mac, Sync Box)
+  ou choisis une autre zone, puis relance la vidéo.
+- *Aucun pont trouvé* : vérifie que l'appareil et le pont sont sur le même réseau
+  (pas de réseau invité / isolation Wi-Fi), puis saisis l'**IP manuelle**.
+- *Les lumières sont en avance sur l'image* : augmente le **retard des lumières**.
+- *Lumières figées ou noires* : force la méthode de capture « Snapshot VLC ».
+
 ## Architecture
 
 ```
@@ -124,6 +180,10 @@ Sources/
       VLCPlayerCore.swift     cœur de lecture VLC partagé (UIViewController) :
                               reprise, pistes audio/sous-titres, progression.
                               import conditionnel TVVLCKit / MobileVLCKit.
+    Hue/                      Lumières Hue : API CLIP v2, appairage, découverte,
+                              Keychain, DTLS PSK, paquets HueStream, HueSyncService.
+    Ambilight/                capture d'image (vue / snapshots VLC) et pipeline
+                              couleur (bandes noires, bords, saturation).
   tvOS/                       ── habillage Apple TV (focus / télécommande) ──
     StremioTVApp.swift        @main tvOS
     Views/                    Root, MainTab, Home, MetaDetail, StreamsList,

@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Réglages : compte Stremio, lecture (taille des sous-titres), add-ons
+/// Réglages : compte Stremio, lecture (taille des sous-titres), lumières Hue, add-ons
 /// (compte + manuels, suppression par balayage) et ajout manuel.
 struct SettingsScreen: View {
     @Environment(AddonRepository.self) private var repo
     @Environment(SessionStore.self) private var session
+    @Environment(HueSyncService.self) private var hue
     @State private var newURL = ""
     @State private var subtitleScale = PlaybackPreferences().subtitleScale
 
@@ -13,6 +14,7 @@ struct SettingsScreen: View {
             Form {
                 accountSection
                 playbackSection
+                hueSection
                 addonsSection
                 addManualSection
                 tipSection
@@ -63,6 +65,28 @@ struct SettingsScreen: View {
             }
             .onChange(of: subtitleScale) { _, newValue in
                 PlaybackPreferences().subtitleScale = newValue
+            }
+        }
+    }
+
+    // MARK: - Lumières Hue
+
+    private var hueSection: some View {
+        Section("Lumières Hue") {
+            NavigationLink {
+                HueSettingsScreen()
+            } label: {
+                HStack {
+                    Label("Lumières Hue (Ambilight)", systemImage: "lightbulb.led.wide")
+                    Spacer()
+                    Text(hue.status.settingsBadge(isEnabled: hue.isPlaybackSyncEnabled,
+                                                   hasSelectedArea: hue.hasSelectedArea))
+                        .font(.caption2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(hue.status.settingsBadgeColor(isEnabled: hue.isPlaybackSyncEnabled,
+                                                                  hasSelectedArea: hue.hasSelectedArea).opacity(0.3), in: Capsule())
+                }
             }
         }
     }

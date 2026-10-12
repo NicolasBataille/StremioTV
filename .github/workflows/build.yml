@@ -1,0 +1,90 @@
+name: Build
+
+# Vérification de compilation (sans signature ni déploiement) des deux apps,
+# plus les tests unitaires tvOS sur simulateur. Ne publie rien sur TestFlight.
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build tvOS + iOS, tests unitaires tvOS
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Cache VLCKit frameworks
+        uses: actions/cache@v4
+        with:
+          path: Vendor
+          key: vlckit-3.7.3-319ed2c0-79128878
+
+      - name: Fetch VLCKit (tvOS + iOS)
+        run: bash scripts/fetch_vlckit.sh
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build tvOS app + tests (simulator)
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild build-for-testing \
+            -project StremioTV.xcodeproj -scheme StremioTV \
+            -destination 'generic/platform=tvOS Simulator' \
+            -derivedDataPath build/tvos \
+            CODE_SIGNING_ALLOWED=NO | tee build/tvos-build.log | grep -E "error:|BUILD|\*\*" || true
+          grep -q "TEST BUILD SUCCEEDED" build/tvos-build.log
+
+      - name: Build iOS app (simulator)
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild build \
+            -project StremioTV.xcodeproj -scheme StremioTV-iOS \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO | tee build/ios-build.log | grep -E "error:|BUILD|\*\*" || true
+          grep -q "BUILD SUCCEEDED" build/ios-build.log
+
+      - name: Run tvOS unit tests (simulator)
+        run: |
+          set -o pipefail
+          DEVICE_ID=$(xcrun simctl list devices available -j \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; ids=[x["udid"] for k,v in d.items() if "tvOS" in k for x in v]; print(ids[0] if ids else "")')
+          if [ -z "$DEVICE_ID" ]; then
+            echo "::warning::Aucun simulateur Apple TV disponible sur le runner : tests ignorés."
+            exit 0
+          fi
+          xcodebuild test-without-building \
+            -project StremioTV.xcodeproj -scheme StremioTV \
+            -destination "id=$DEVICE_ID" \
+            -derivedDataPath build/tvos \
+            -only-testing:StremioTVTests \
+            CODE_SIGNING_ALLOWED=NO | tee build/tvos-test.log | grep -E "error:|Test Case .* failed|Executed|\*\*" || true
+          grep -q "TEST EXECUTE SUCCEEDED" build/tvos-test.log
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build/*.log
+          if-no-files-found: ignore
