@@ -1,0 +1,136 @@
+name: iOS check
+
+# Build de l'app iOS + tests UI sur simulateurs iPhone et iPad, avec captures
+# d'écran exportées en artefact (« ios-screenshots »).
+# Lancement manuel uniquement (minutes macOS coûteuses) : onglet Actions →
+# « iOS check » → Run workflow, une fois ce fichier présent sur la branche par défaut.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ios-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build & UI tests (iPhone + iPad)
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Cache VLCKit frameworks
+        uses: actions/cache@v4
+        with:
+          path: Vendor
+          key: vlckit-3.7.3-319ed2c0-79128878
+
+      - name: Fetch VLCKit
+        run: bash scripts/fetch_vlckit.sh
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Pick simulators
+        run: |
+          xcrun simctl list devices available -j > sims.json
+          pick() {
+            python3 -c "import json,sys
+          d=json.load(open('sims.json'))['devices']
+          rt=sorted([k for k in d if 'iOS' in k], key=lambda k:[int(x) for x in k.split('iOS-')[-1].split('-')])
+          for k in reversed(rt):
+              for s in d[k]:
+                  if s['name'].startswith('$1'): print(s['udid']); sys.exit()"
+          }
+          IPHONE=$(pick "iPhone"); IPAD=$(pick "iPad Pro")
+          [ -n "$IPAD" ] || IPAD=$(pick "iPad")
+          echo "IPHONE_UDID=$IPHONE" >> "$GITHUB_ENV"
+          echo "IPAD_UDID=$IPAD" >> "$GITHUB_ENV"
+          xcrun simctl list devices available | grep -E "$IPHONE|$IPAD"
+
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project StremioTV.xcodeproj -scheme StremioTV-iOS \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
+            | tee build.log | grep -E "error:|warning: .*Sources/|BUILD|\*\*" || true
+          grep -q "TEST BUILD SUCCEEDED" build.log
+
+      - name: UI tests — iPhone
+        id: iphone
+        continue-on-error: true
+        run: |
+          xcodebuild test-without-building \
+            -project StremioTV.xcodeproj -scheme StremioTV-iOS \
+            -destination "id=$IPHONE_UDID" -derivedDataPath build \
+            -resultBundlePath results/iPhone.xcresult 2>&1 | tail -40
+
+      - name: UI tests — iPad
+        id: ipad
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project StremioTV.xcodeproj -scheme StremioTV-iOS \
+            -destination "id=$IPAD_UDID" -derivedDataPath build \
+            -resultBundlePath results/iPad.xcresult 2>&1 | tail -40
+
+      - name: Export screenshots & summary
+        if: always()
+        run: |
+          mkdir -p shots
+          for r in iPhone iPad; do
+            [ -d "results/$r.xcresult" ] || continue
+            echo "===== $r ====="
+            xcrun xcresulttool get test-results summary --path "results/$r.xcresult" || true
+            xcrun xcresulttool get test-results tests --path "results/$r.xcresult" \
+              | python3 -c "import json,sys
+          def walk(n):
+              for c in n.get('children',[]) or []:
+                  if c.get('nodeType')=='Failure Message': print('FAILURE:', c.get('name'))
+                  walk(c)
+          for n in json.load(sys.stdin).get('testNodes',[]): walk(n)" || true
+            out="tmp_$r"; mkdir -p "$out"
+            xcrun xcresulttool export attachments --path "results/$r.xcresult" --output-path "$out" || continue
+            python3 - "$out" <<'PY'
+          import json, os, shutil, sys
+          d = sys.argv[1]
+          for test in json.load(open(os.path.join(d, "manifest.json"))):
+              for a in test.get("attachments", []):
+                  name = a.get("suggestedHumanReadableName") or a["exportedFileName"]
+                  name = name.split("_0_")[0]
+                  ext = os.path.splitext(a["exportedFileName"])[1]
+                  shutil.copy(os.path.join(d, a["exportedFileName"]), os.path.join("shots", name + ext))
+          PY
+          done
+          ls -la shots
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-screenshots
+          path: shots
+          if-no-files-found: warn
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcresults
+          path: results
+          if-no-files-found: ignore
+
+      - name: Fail if UI tests failed
+        if: steps.iphone.outcome == 'failure' || steps.ipad.outcome == 'failure'
+        run: exit 1
