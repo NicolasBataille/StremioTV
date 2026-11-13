@@ -23,7 +23,16 @@ final class HomeViewModel {
 
     private let client = AddonClient()
 
-    func load(addons: [InstalledAddon]) async {
+    /// Clé (ids des add-ons) du dernier chargement **complet** réussi. Permet de
+    /// ne pas tout recharger à chaque réapparition de l'écran (changement
+    /// d'onglet, retour depuis la bibliothèque…) : on ne recharge que si la
+    /// liste d'add-ons a changé, ou sur demande explicite (tirer-pour-recharger).
+    @ObservationIgnored private var loadedKey: [String]?
+
+    func load(addons: [InstalledAddon], force: Bool = false) async {
+        let key = addons.map(\.id)
+        if !force, isLoading || (loadedKey == key && !sections.isEmpty) { return }
+
         isLoading = true
         errorMessage = nil
 
@@ -48,8 +57,9 @@ final class HomeViewModel {
 
         // 3. Charger les sections en parallèle et les afficher **au fil de l'eau**
         //    (dans l'ordre), pour que les add-ons rapides s'affichent sans
-        //    attendre les lents.
-        sections = []
+        //    attendre les lents. Lors d'un rechargement, on garde les sections
+        //    existantes affichées jusqu'à l'arrivée des nouvelles (pas de flash).
+        var replaced = false
         var byOrder: [Int: CatalogSection] = [:]
         await withTaskGroup(of: (Int, CatalogSection?).self) { group in
             for job in jobs {
@@ -60,10 +70,15 @@ final class HomeViewModel {
             for await (order, section) in group {
                 guard let section else { continue }
                 byOrder[order] = section
+                replaced = true
                 sections = byOrder.keys.sorted().compactMap { byOrder[$0] }
             }
         }
 
+        if !replaced { sections = [] }
+        // Tâche annulée (écran quitté en cours de route) : chargement partiel,
+        // on ne le marque pas comme complet pour le reprendre au retour.
+        if !Task.isCancelled, !sections.isEmpty { loadedKey = key }
         errorMessage = sections.isEmpty ? "Aucun catalogue disponible." : nil
         isLoading = false
     }

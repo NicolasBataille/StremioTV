@@ -6,7 +6,11 @@ struct HeroCard: View {
     let preview: MetaPreview
     let bases: [String]
 
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var detail: MetaDetail?
+
+    /// Plus haute sur iPad (largeur régulière) pour garder un vrai format « héros ».
+    private var maxHeight: CGFloat { sizeClass == .regular ? 420 : 260 }
 
     private var backdrop: String? { detail?.background ?? preview.background ?? preview.poster }
 
@@ -17,7 +21,7 @@ struct HeroCard: View {
             BackdropImage(urlString: backdrop)
                 .aspectRatio(16.0 / 9.0, contentMode: .fill)
                 .frame(maxWidth: .infinity)
-                .frame(maxHeight: 260)
+                .frame(maxHeight: maxHeight)
                 .clipped()
                 .overlay { BackdropScrim() }
                 .overlay(alignment: .bottomLeading) { caption.padding(20) }
@@ -25,7 +29,8 @@ struct HeroCard: View {
                 .padding(.horizontal)
         }
         .buttonStyle(.plain)
-        .task {
+        .task(id: preview.id) {
+            guard detail?.id != preview.id else { return }
             detail = try? await AddonClient().meta(
                 base: bases.first ?? "", type: preview.type ?? "movie", id: preview.id
             )
@@ -35,7 +40,7 @@ struct HeroCard: View {
     private var caption: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(detail?.name ?? preview.name ?? "")
-                .font(.title.bold())
+                .font(sizeClass == .regular ? .largeTitle.bold() : .title.bold())
                 .foregroundStyle(.white)
                 .lineLimit(2)
                 .shadow(radius: 6)

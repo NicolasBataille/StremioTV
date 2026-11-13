@@ -15,7 +15,13 @@ final class DetailViewModel {
 
     private let client = AddonClient()
 
+    /// Id de la fiche déjà chargée depuis un add-on (le repli sur l'aperçu
+    /// n'est pas mémorisé, pour retenter au prochain affichage).
+    @ObservationIgnored private var loadedId: String?
+
     func loadMeta(preview: MetaPreview, bases: [String]) async {
+        // Déjà chargée (retour depuis les sources / le lecteur) : rien à refaire.
+        if loadedId == preview.id { return }
         isLoadingMeta = true
         defer { isLoadingMeta = false }
         let type = preview.type ?? "movie"
@@ -23,6 +29,7 @@ final class DetailViewModel {
         for base in bases {
             if let detail = try? await client.meta(base: base, type: type, id: preview.id) {
                 meta = detail
+                loadedId = preview.id
                 return
             }
         }
