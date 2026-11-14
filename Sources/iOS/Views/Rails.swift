@@ -4,6 +4,7 @@ import SwiftUI
 /// défilement horizontal de posters.
 struct CatalogRail: View {
     let section: HomeViewModel.CatalogSection
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -31,13 +32,13 @@ struct CatalogRail: View {
             .padding(.horizontal)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 12) {
+                LazyHStack(alignment: .top, spacing: sizeClass == .regular ? 18 : 12) {
                     ForEach(section.metas) { meta in
                         NavigationLink {
                             DetailScreen(preview: meta)
                         } label: {
                             PosterCardIOS(meta: meta)
-                                .frame(width: 118)
+                                .frame(width: PosterMetrics.railWidth(sizeClass))
                         }
                         .buttonStyle(.plain)
                     }
@@ -51,6 +52,7 @@ struct CatalogRail: View {
 /// Rangée « Continuer à regarder » : items en cours avec progression.
 struct ContinueWatchingRail: View {
     let items: [LibraryItem]
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -59,7 +61,7 @@ struct ContinueWatchingRail: View {
                 .padding(.horizontal)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 12) {
+                LazyHStack(alignment: .top, spacing: sizeClass == .regular ? 18 : 12) {
                     ForEach(items) { item in
                         NavigationLink {
                             DetailScreen(preview: item.asPreview())
@@ -69,7 +71,7 @@ struct ContinueWatchingRail: View {
                                 progress: item.progress,
                                 caption: episodeCaption(item)
                             )
-                            .frame(width: 118)
+                            .frame(width: PosterMetrics.railWidth(sizeClass))
                         }
                         .buttonStyle(.plain)
                     }

@@ -9,6 +9,9 @@ struct DetailScreen: View {
     @Environment(LibraryStore.self) private var library
     @State private var model = DetailViewModel()
     @State private var selectedSeason: Int?
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    private var isRegular: Bool { sizeClass == .regular }
 
     private var type: String { preview.type ?? "movie" }
     private var detail: MetaDetail { model.meta ?? MetaDetail(from: preview) }
@@ -30,7 +33,11 @@ struct DetailScreen: View {
                     }
                     if type == "series" { episodeSection }
                 }
-                .padding(.horizontal)
+                // iPad : colonne de lecture centrée plutôt que des lignes
+                // et boutons étirés sur toute la largeur de l'écran.
+                .frame(maxWidth: isRegular ? 820 : .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, isRegular ? 32 : 16)
             }
             .padding(.bottom, 24)
         }
@@ -53,7 +60,7 @@ struct DetailScreen: View {
         BackdropImage(urlString: detail.background ?? posterURL)
             .aspectRatio(16.0 / 9.0, contentMode: .fill)
             .frame(maxWidth: .infinity)
-            .frame(height: 220)
+            .frame(height: isRegular ? 380 : 220)
             .clipped()
             .overlay {
                 LinearGradient(colors: [.clear, .black.opacity(0.6), .black],
@@ -68,7 +75,7 @@ struct DetailScreen: View {
             } placeholder: {
                 RoundedRectangle(cornerRadius: 10).fill(.gray.opacity(0.25))
             }
-            .frame(width: 110, height: 165)
+            .frame(width: isRegular ? 160 : 110, height: isRegular ? 240 : 165)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .shadow(radius: 8)
             .offset(y: -50)

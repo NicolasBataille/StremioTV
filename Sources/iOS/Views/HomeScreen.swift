@@ -5,7 +5,8 @@ import SwiftUI
 struct HomeScreen: View {
     @Environment(AddonRepository.self) private var repo
     @Environment(LibraryStore.self) private var library
-    @State private var model = HomeViewModel()
+    /// Partagé via `MainShell` pour survivre aux changements d'onglet/section.
+    @Environment(HomeViewModel.self) private var model
 
     var body: some View {
         NavigationStack {
@@ -24,8 +25,10 @@ struct HomeScreen: View {
             .navigationTitle("Accueil")
             .refreshable {
                 await library.refresh()
-                await model.load(addons: repo.addons)
+                await model.load(addons: repo.addons, force: true)
             }
+            // Ne recharge que si les add-ons ont changé : revenir sur l'onglet
+            // n'entraîne plus de nouvelle série de requêtes.
             .task(id: repo.addons.map(\.id)) {
                 await model.load(addons: repo.addons)
             }

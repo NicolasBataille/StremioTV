@@ -41,13 +41,25 @@ enum AppSection: String, CaseIterable, Identifiable {
 /// View / Slide Over, ce qui recréerait tout le conteneur et détruirait l'état
 /// (view-models, catalogues chargés…). `NavigationSplitView` gère lui-même la
 /// largeur compacte en repliant ses colonnes.
+///
+/// Les view-models de l'Accueil et de la Recherche vivent **ici** et non dans
+/// les écrans : sur iPad, changer de section dans la barre latérale recrée
+/// l'écran de détail — sans cela, revenir sur l'Accueil depuis la Bibliothèque
+/// relançait toutes les requêtes de catalogues et effaçait la recherche.
 struct MainShell: View {
+    @State private var home = HomeViewModel()
+    @State private var search = SearchViewModel()
+
     var body: some View {
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            SidebarShell()
-        } else {
-            TabShell()
+        Group {
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                SidebarShell()
+            } else {
+                TabShell()
+            }
         }
+        .environment(home)
+        .environment(search)
     }
 }
 

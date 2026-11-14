@@ -9,11 +9,19 @@ final class SearchViewModel {
     private(set) var results: [MetaPreview] = []
     private(set) var isSearching = false
     private(set) var lastQuery = ""
+    /// Texte saisi dans la barre de recherche (conservé entre deux affichages).
+    var query = ""
 
     private let client = AddonClient()
 
+    /// Dernière requête dont la recherche est allée à son terme : évite de
+    /// relancer la même recherche quand l'écran réapparaît (changement d'onglet).
+    @ObservationIgnored private var completedQuery: String?
+
     func search(query: String, addons: [InstalledAddon]) async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed == completedQuery { return }
+        completedQuery = nil
         lastQuery = trimmed
         guard trimmed.count >= 2 else {
             results = []
@@ -48,11 +56,13 @@ final class SearchViewModel {
             }
         }
         results = merged
+        if !Task.isCancelled { completedQuery = trimmed }
     }
 
     func clear() {
         results = []
         lastQuery = ""
+        completedQuery = nil
     }
 
     private func searchableCatalogs(in manifest: Manifest) -> [CatalogDescriptor] {

@@ -8,7 +8,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.3.1"
+    MARKETING_VERSION: "0.3.2"
     CURRENT_PROJECT_VERSION: "1"
     ENABLE_BITCODE: NO
 targets:
@@ -115,6 +115,22 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_TARGET_NAME: StremioTV
 
+  # Tests UI iPhone / iPad (simulateur) : parcours + captures d'écran.
+  StremioTV-iOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - UITests-iOS
+    dependencies:
+      - target: StremioTV-iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nicolasbataille.stremiotv.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        TEST_TARGET_NAME: StremioTV-iOS
+
 schemes:
   StremioTV:
     build:
@@ -132,3 +148,7 @@ schemes:
     build:
       targets:
         StremioTV-iOS: all
+        StremioTV-iOSUITests: [test]
+    test:
+      targets:
+        - StremioTV-iOSUITests

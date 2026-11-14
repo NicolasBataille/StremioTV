@@ -70,10 +70,16 @@ struct PosterGrid: View {
     var progressFor: (MetaPreview) -> Double? = { _ in nil }
     var onReachEnd: () -> Void = {}
 
-    private let columns = [GridItem(.adaptive(minimum: 108, maximum: 170), spacing: 14)]
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    private var columns: [GridItem] {
+        sizeClass == .regular
+            ? [GridItem(.adaptive(minimum: 150, maximum: 210), spacing: 20)]
+            : [GridItem(.adaptive(minimum: 104, maximum: 170), spacing: 14)]
+    }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 18) {
+        LazyVGrid(columns: columns, spacing: sizeClass == .regular ? 26 : 18) {
             ForEach(metas) { meta in
                 NavigationLink {
                     DetailScreen(preview: meta)
@@ -87,5 +93,13 @@ struct PosterGrid: View {
             }
         }
         .padding(.horizontal)
+    }
+}
+
+/// Tailles de posters selon la classe de taille horizontale :
+/// compacte (iPhone, iPad en Split View étroit) vs régulière (iPad plein écran).
+enum PosterMetrics {
+    static func railWidth(_ sizeClass: UserInterfaceSizeClass?) -> CGFloat {
+        sizeClass == .regular ? 150 : 118
     }
 }
