@@ -2,16 +2,9 @@ name: iOS check
 
 # Build de l'app iOS + tests UI sur simulateurs iPhone et iPad, avec captures
 # d'écran exportées en artefact (« ios-screenshots »).
-# Se lance sur les branches de travail (claude/**) et à la demande.
+# Lancement manuel uniquement (minutes macOS) : onglet Actions → « iOS check »
+# → Run workflow.
 on:
-  push:
-    branches:
-      - "claude/**"
-    paths:
-      - "Sources/**"
-      - "UITests-iOS/**"
-      - "project.yml"
-      - ".github/workflows/ios-check.yml"
   workflow_dispatch:
 
 concurrency:
